@@ -5,8 +5,8 @@ import numpy as np
 class AppRes(object):
     def __init__(self, each_app):
         self.app_id = each_app[0]
-        self.cpu_slice = np.array(list(max(float, each_app[1].split('|'))))
-        self.mem_slice = np.array(list(max(float, each_app[2].split('|'))))
+        self.cpu_slice = np.array(list(map(float, each_app[1].split('|'))))
+        self.mem_slice = np.array(list(map(float, each_app[2].split('|'))))
         self.disk = int(each_app[3])
         self.p = int(each_app[4])
         self.m = int(each_app[5])
@@ -17,12 +17,17 @@ class AppRes(object):
         return
     
     def to_string(self):
-        return '%s, d %d, p %d, m %d, pm %d' % (self.app_id, self.disk, self.p, self.m, self.pm)
+        return '%s, d %d, p %d, m %d, pm %d' % \
+            (self.app_id, self.disk, self.p, self.m, self.pm)
+            
+    def to_full_string(self):
+        return '%s, c %s, m %s, d %d, p %d, m %d, pm %d' % \
+            (self.app_id, self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm)
     
     @staticmethod
     def sum_app_res(inst_list, inst_app_dict, app_res_dict):
-        cpu_slice = np.array(np.zeros(98))
-        mem_slice = np.array(np.zeros(98))
+        cpu_slice = np.array(np.zeros(SLICE_CNT))
+        mem_slice = np.array(np.zeros(SLICE_CNT))
         disk = 0
         p = 0
         m = 0
@@ -36,6 +41,13 @@ class AppRes(object):
             p += app_res.p
             m += app_res.m
             pm += app_res.pm
-    
          
         return cpu_slice, mem_slice, disk, p, m, pm
+    
+    @staticmethod
+    def get_var_mean_of_apps(inst_list, inst_app_dict, app_res_dict):
+        sum_var = 0
+        for each_inst in inst_list:
+            sum_var += app_res_dict[inst_app_dict[each_inst][0]].res_var
+
+        return sum_var / len(inst_list)

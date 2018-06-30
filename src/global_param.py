@@ -19,7 +19,7 @@ MAX_DISK = 1024
 MAX_P = 7
 MAX_M = 7
 MAX_PM = 9
-
+SLICE_CNT = 98
 ISOTIMEFORMAT = "%Y-%m-%d %X"
 def getCurrentTime():
     return "[%s]" % (time.strftime(ISOTIMEFORMAT, time.localtime()))

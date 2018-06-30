@@ -23,6 +23,7 @@ def load_data():
 
 
 def main():
+    print(getCurrentTime(), 'running...')
     res_mgr = MachineResMgr()
     
     inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
@@ -72,5 +73,43 @@ def c(m, n):
     for i in range(1, n+1):
         fenmu *= i
     return z/fenmu
+
+
+def reverse_machine():
+
+    machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources.csv' % runningPath, 'r'))
+    output_file = open(r'%s\..\input\machine_resources_reverse.csv' % runningPath, 'w')
+
+
+    machine_res_list = []
+    for each_machine in machine_res_csv:
+        machine_res_list.append(each_machine)
+
+    for i in range(len(machine_res_list)-1, -1, -1):
+        output_file.write('%s\n' %','.join(machine_res_list[i]))
+        
+    output_file.close()
+
+def sum_cpu_slice():
+    app_res_dict = {}
+    app_res_csv = csv.reader(open(r'%s\..\input\app_resources.csv' % runningPath, 'r'))
+    app_cpu_sum = np.array(np.zeros(98))
+    app_mem_sum = np.array(np.zeros(98))
+    app_disk_sum = 0
+    app_p_sum = 0
+    app_m_sum = 0
+    app_pm_sum = 0
+    for each_app in app_res_csv:
+        
+        app_cpu_sum += np.array(list(map(float, each_app[1].split('|'))))
+        app_mem_sum += np.array(list(map(float, each_app[2].split('|'))))
+        app_disk_sum += int(each_app[3])
+        app_p_sum += int(each_app[4])
+        app_m_sum += int(each_app[5])
+        app_pm_sum += int(each_app[6])
+    
+    return app_cpu_sum
+
+
 if __name__ == '__main__':
     main()

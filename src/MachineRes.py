@@ -18,41 +18,77 @@ class MachineRes(object):
         self.pm = float(each_machine[6]) # 剩余 pm
         
         self.cpu_useage = 0
-        self.cpu_slice = np.array(np.zeros(0))     # cpu 使用量
-        self.mem_slice  = np.array(np.zeros(0))     # mem 使用量
-        self.cpu_percentage = 0 # cpu 使用率 = cpu 使用量 / cpu 容量
+        self.cpu_slice = np.array(np.zeros(SLICE_CNT))  # cpu 使用量
+        self.mem_slice  = np.array(np.zeros(SLICE_CNT)) # mem 使用量
+        self.cpu_percentage = 0 # cpu 使用率 = cpu slice max 使用量 / cpu 容量
     
         # 剩余可用资源
         self.res_sum = 1 - self.cpu_percentage + self.mem + self.disk + self.p + self.m + self.pm
         return
 
     def to_string(self):    
-        return '%s, cp %.6f, c %.6f, m %d, d %d, p %d, m %d, pm %d' % \
+        return '%s, cp %.6f, d %d, p %d, m %d, pm %d' % \
               (self.machine_id, 
-              self.mem * MAX_MEM, 
-              self.disk * MAX_DISK, 
-              self.p * MAX_P, 
-              self.m * MAX_M, 
-              self.pm * MAX_PM)
+               self.cpu_percentage,
+              self.disk, 
+              self.p, 
+              self.m, 
+              self.pm)
+
+    def to_full_string(self):    
+        return '%s, cp %.6f, c %s, m %s, d %d, p %d, m %d, pm %d' % \
+              (self.machine_id, 
+               self.cpu_percentage,
+               self.cpu_slice,
+               self.mem_slice,
+              self.disk, 
+              self.p, 
+              self.m, 
+              self.pm)              
 
     # 得到剩余可用资源
     def get_res_sum(self):
         return self.res_sum
        
     def update_machine_res(self, app_res, ratio):
-        self.mem_slice += ratio * app_res.mem_slice
-        self.cpu_slice += ratio * app_res.cpu_slice
+        self.mem_slice += (-ratio) * app_res.mem_slice
+        self.cpu_slice += (-ratio) * app_res.cpu_slice
         self.disk += ratio * app_res.disk
         self.p += ratio * app_res.p
         self.m += ratio * app_res.m
         self.pm += ratio * app_res.pm
         
+        self.cpu_percentage = self.cpu_slice.max() / self.cpu
+        
     # 机器资源是否能够容纳 inst
     def meet_inst_res_require(self, app_res):
-        return (np.all(self.cpu_slice >= app_res.cpu_slice) and  
-                np.all(self.mem_slice >= app_res.mem_slice) and
+        return (np.all(self.cpu - self.cpu_slice >= app_res.cpu_slice) and  
+                np.all(self.mem - self.mem_slice >= app_res.mem_slice) and
                 self.disk >= app_res.disk and
                 self.p >= app_res.p and
                 self.m >= app_res.m  and
                 self.pm >= app_res.pm)
+        
+    @staticmethod
+    def sum_machine_remaining_res(sorted_machine_res):
+        cpu_slice = np.array(np.zeros(SLICE_CNT))
+        mem_slice = np.array(np.zeros(SLICE_CNT))
+        disk = 0
+        p = 0
+        m = 0
+        pm = 0
+        
+        for machine_info_tuple in sorted_machine_res:
+            machine_res =  machine_info_tuple[1]
+
+            cpu_slice += machine_res.running_machine_res.cpu_slice
+            mem_slice += machine_res.running_machine_res.mem_slice
+            disk += machine_res.running_machine_res.disk
+            p += machine_res.running_machine_res.p
+            m += machine_res.running_machine_res.m
+            pm += machine_res.running_machine_res.pm
+            
+            return cpu_slice, mem_slice, disk, p, m, pm
+
+
         

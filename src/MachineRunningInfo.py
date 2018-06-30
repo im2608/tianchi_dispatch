@@ -28,7 +28,7 @@ class MachineRunningInfo(object):
             self.running_app_dict[app_res.app_id] += 1
         else:
             self.running_inst_list.remove(inst_id)
-            
+
             self.running_app_dict[app_res.app_id] -= 1
             if (self.running_app_dict[app_res.app_id] == 0):
                 self.running_app_dict.pop(app_res.app_id)
@@ -41,9 +41,12 @@ class MachineRunningInfo(object):
             
         print(getCurrentTime(), self.running_machine_res.to_string())
     
-    # cpu 使用率低于0.5 的归为一类
+    def get_cpu(self):
+        return self.running_machine_res.cpu
+
     def get_cpu_percentage(self):
-        return max(self.running_machine_res.cpu_percentage - 0.5, 0)
+        return max(self.running_machine_res.cpu_percentage - 0.5, 0) # cpu 使用率低于0.5 的归为一类 6027
+#         return self.running_machine_res.cpu_percentage
     
     def get_cpu_useage(self):
         return self.running_machine_res.cpu_useage
@@ -93,17 +96,30 @@ class MachineRunningInfo(object):
     # 迁出的规则为： 满足迁入app cpu 的最小值，迁出的 app 越多越好，越多表示迁出的 app cpu 越分散，迁移到其他机器上也就越容易
     def cost_of_immigrate_app(self, immgrate_inst_id, inst_app_dict, app_res_dict, app_constraint_dict):
        
+        start_time = time.time()
         candidate_apps_list_of_machine = []
         # 候选 迁出  inst list 的长度从 1 到 len(self.runing_app_list)
-        for inst_list_size in range(1, len(self.running_inst_list) + 1):
-            end_idx_of_running_set = len(self.running_inst_list) - inst_list_size + 1 
+        candidate_insts = self.running_inst_list.copy()
+        for inst_list_size in range(1, len(candidate_insts) + 1):
+            app_list_at_size = []
+            end_idx_of_running_set = len(candidate_insts) - inst_list_size + 1 
             for i in range(end_idx_of_running_set): 
-                cur_inst_list = [self.running_inst_list[i]]
-                self.find_migratable_app(cur_inst_list, inst_list_size - 1, i + 1, \
-                                         candidate_apps_list_of_machine, immgrate_inst_id, \
+                cur_inst_list = [candidate_insts[i]]
+                self.find_migratable_app(cur_inst_list, inst_list_size - 1, i + 1, candidate_insts, \
+                                         app_list_at_size, immgrate_inst_id, \
                                          inst_app_dict, app_res_dict, app_constraint_dict)
 
-        # 在所有符合条件的可迁出 app list 中， 找到所有资源之和最小的一个作为该 machine 的迁出 app list
+            candidate_apps_list_of_machine.append(app_list_at_size)
+            # 若 inst 出现在长度为 n 的候选迁出列表中，则该 inst 不会出现在长度为 n+1 的列表中， 将 inst 从候选列表中删除，
+            # 这样可以极大地减小枚举的数量
+            for each_list in app_list_at_size:               
+                for each_inst in each_list:
+                    candidate_insts.remove(each_inst)
+
+            # len(candidate_insts) <= inst_list_size , inst_list_size 为已经枚举完毕的长度，下次循环会+1， 所以这里是 <=
+            if (len(candidate_insts) == 0 or len(candidate_insts) <= inst_list_size):
+                break
+
         # 在所有符合条件的可迁出 app list 中， 找到所有资源方差的均值最小的一个作为该 machine 的迁出 app list
         if (len(candidate_apps_list_of_machine) > 0):
             min_sum = 1e9
@@ -113,6 +129,10 @@ class MachineRunningInfo(object):
                 if (sum_of_list < min_sum):
                     min_sum = sum_of_list
                     min_idx = i
+                    
+            end_time = time.time()
+            
+            print(getCurrentTime(), " done, ran %d seconds" % (end_time - start_time))
 
             return candidate_apps_list_of_machine[min_idx]
         else:
@@ -120,7 +140,7 @@ class MachineRunningInfo(object):
         
     # 在 running_inst_list 的 [start_idx, end_idx) 范围内， 找到一个 app_list_size 长度的 app_list, 
     # 使得 app_list 的 cpu 满足迁入的  app cpu， 保存起来作为迁出的 app list 候选
-    def find_migratable_app(self, cur_inst_list, left_inst_list_size, start_idx,  
+    def find_migratable_app(self, cur_inst_list, left_inst_list_size, start_idx, candidate_insts,
                             candidate_apps_list, immgrate_inst_id, inst_app_dict, app_res_dict, app_constraint_dict):
         if (left_inst_list_size == 0):
             # 将要迁出的资源之和
@@ -137,7 +157,7 @@ class MachineRunningInfo(object):
                 candidate_apps_list.append(cur_inst_list)
             return 
         
-        for i in range(start_idx, len(self.running_inst_list)):
-            self.find_migratable_app(cur_inst_list + [self.running_inst_list[i]], left_inst_list_size - 1, i + 1, 
+        for i in range(start_idx, len(candidate_insts)):
+            self.find_migratable_app(cur_inst_list + [candidate_insts[i]], left_inst_list_size - 1, i + 1, candidate_insts,
                                      candidate_apps_list, immgrate_inst_id, inst_app_dict, app_res_dict, app_constraint_dict)
         return
