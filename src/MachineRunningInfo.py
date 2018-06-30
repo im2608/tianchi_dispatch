@@ -109,7 +109,7 @@ class MachineRunningInfo(object):
                                          app_list_at_size, immgrate_inst_id, \
                                          inst_app_dict, app_res_dict, app_constraint_dict)
 
-            candidate_apps_list_of_machine.append(app_list_at_size)
+            candidate_apps_list_of_machine.extend(app_list_at_size)
             # 若 inst 出现在长度为 n 的候选迁出列表中，则该 inst 不会出现在长度为 n+1 的列表中， 将 inst 从候选列表中删除，
             # 这样可以极大地减小枚举的数量
             for each_list in app_list_at_size:               
@@ -132,7 +132,8 @@ class MachineRunningInfo(object):
                     
             end_time = time.time()
             
-            print(getCurrentTime(), " done, ran %d seconds" % (end_time - start_time))
+            print(getCurrentTime(), " done, running inst len %d, ran %d seconds" % \
+                  (len(self.running_inst_list), end_time - start_time))
 
             return candidate_apps_list_of_machine[min_idx]
         else:

@@ -31,7 +31,7 @@ class MachineResMgr(object):
         #  记录 machine 的运行信息， 包括 cpu 使用量,  cpu 使用率 = cpu 使用量 / cpu 容量， d, p, m, pm, app list
         self.machine_runing_info_dict = {} 
         machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources_reverse.csv' % runningPath, 'r'))
-        machine_res_csv = csv.reader(open(r'%s\..\input\part_normal_machine.csv' % runningPath, 'r'))
+#         machine_res_csv = csv.reader(open(r'%s\..\input\part_normal_machine.csv' % runningPath, 'r'))
         for each_machine in machine_res_csv:
             machine_id = each_machine[0]
             self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
@@ -107,38 +107,12 @@ class MachineResMgr(object):
         print(getCurrentTime(), 'no machine could dispatch inst %s, finding some migrating insts' % (inst_id))
         logging.info('no machine could dispatch inst %s, finding some migrating insts' % (inst_id))
 
-        migrating_machine_running_res = None
-        migrating_insts = []
-        min_var = 1e9
-        start_time = time.time()
-        for idx, machine_info_tuple in enumerate(self.sorted_machine_res):
-            if (idx % 100 == 0):
-                end_time = time.time()
-                print(getCurrentTime(), '%d machine through..., used %d seconds\r' % (idx, end_time - start_time), end='')
-                start_time = time.time()
-            
-            machine_id =  machine_info_tuple[0]
-            machine_running_res = self.machine_runing_info_dict[machine_id]
-            if ((skipped_machine_id is not None and machine_id in skipped_machine_id) or 
-                # 在当前机器能够容纳 inst 时， 才需要查找迁出列表
-                not machine_running_res.meet_inst_res_require(app_res)):
-                continue
-
-            # 在每台机器上得到可迁出的 app list
-            tmp = machine_running_res.cost_of_immigrate_app(inst_id, self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)
-            if (len(tmp) == 0):
-                continue
-
-            var_mean_of_list = AppRes.get_var_mean_of_apps(tmp, self.inst_app_dict, self.app_res_dict)
-            # 找到迁出资源的方差的均值最小的一个作为最终的迁出 app list, 从 migrating_machine_running_res 迁出
-            if (var_mean_of_list < min_var):
-                migrating_insts = tmp
-                migrating_machine_running_res = self.machine_runing_info_dict[machine_id]
-                min_var = var_mean_of_list
+        migrating_machine_running_res, migrating_insts = self.search_immigrate_list(inst_id, skipped_machine_id)
 
         # 在 migrating_machine_running_res 上将 migrating_insts 迁出
         logging.info("To migrat %s/%s into %s, immigrating %s " %\
                      (inst_id, app_res.app_id, migrating_machine_running_res.machine_res.machine_id, migrating_insts))
+
         for each_inst in migrating_insts:
             migrating_machine_running_res.release_app(each_inst, self.app_res_dict[self.inst_app_dict[each_inst][0]])
 
@@ -163,24 +137,31 @@ class MachineResMgr(object):
     # 按照 get_cpu_percentage 从低到高排序, 优先分配使用率低的机器
     def sort_machine_by_cpu_per(self):
         self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key=lambda d:d[1].get_cpu_percentage())
-        
+
     def search_machine_immigrate_list(self, inst_id, skipped_machine_id):
-        machine_idx = self.get_machine_index()
-        machine_id = self.sorted_machine_res[machine_idx][0]        
-        machine_running_res = self.machine_runing_info_dict[machine_id]
-        app_res = self.app_res_dict[self.inst_app_dict[inst_id][0]]
+        while (True):
+            machine_idx = self.get_machine_index()
+            if (machine_idx == -1):
+                return
 
-        if ((skipped_machine_id is not None and machine_id in skipped_machine_id) or 
-            # 在当前机器能够容纳 inst 时， 才需要查找迁出列表
-            not machine_running_res.meet_inst_res_require(app_res)):
-            return
+            if (machine_idx % 100 == 0):
+                print(getCurrentTime(), '%d machine handled' % machine_idx)
 
-        # 在每台机器上得到可迁出的 app list
-        tmp = machine_running_res.cost_of_immigrate_app(inst_id, self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)
-        if (len(tmp) == 0):
-            return
-
-        self.add_to_candidate_list(machine_id, tmp)
+            machine_id = self.sorted_machine_res[machine_idx][0]        
+            machine_running_res = self.machine_runing_info_dict[machine_id]
+            app_res = self.app_res_dict[self.inst_app_dict[inst_id][0]]
+    
+            if ((skipped_machine_id is not None and machine_id in skipped_machine_id) or 
+                # 在当前机器能够容纳 inst 时， 才需要查找迁出列表
+                not machine_running_res.meet_inst_res_require(app_res)):
+                return
+    
+            # 在每台机器上得到可迁出的 app list
+            tmp = machine_running_res.cost_of_immigrate_app(inst_id, self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)
+            if (len(tmp) == 0):
+                return
+    
+            self.add_to_candidate_list(machine_id, tmp)
         return
 
     def add_to_candidate_list(self, machine_id, inst_list):
@@ -190,7 +171,10 @@ class MachineResMgr(object):
 
     def get_machine_index(self):
         self.machine_lock.acquire()
-        tmp = self.machine_idx
+        if (self.machine_idx < 6000):
+            tmp = self.machine_idx
+        else:
+            tmp = -1
         self.machine_idx += 1
         self.machine_lock.release()
         return tmp
@@ -203,9 +187,12 @@ class MachineResMgr(object):
     def search_immigrate_list(self, inst_id, skipped_machine_id):
         self.machine_idx = 0
         self.candidate_inst_list.clear()
-
-        thread_cnt = cpu_count() * 2 + 2
+        thread_cnt = cpu_count() * 8 + 2
+        
         thread_list = []
+        
+        print(getCurrentTime(), 'starting %d threads to search' % thread_cnt)
+
         for i in range(thread_cnt):
             t =  threading.Thread(target=MachineResMgr.search_immigrate_list_func, args=(self, inst_id, skipped_machine_id, ))
             t.start()
@@ -218,7 +205,7 @@ class MachineResMgr(object):
         migrating_insts = []
         min_var = 1e9
         
-        for machine_id, each_list in self.candidate_inst_list.items()
+        for machine_id, each_list in self.candidate_inst_list.items():
             var_mean_of_list = AppRes.get_var_mean_of_apps(each_list, self.inst_app_dict, self.app_res_dict)
             # 找到迁出资源的方差的均值最小的一个作为最终的迁出 app list, 从 migrating_machine_running_res 迁出
             if (var_mean_of_list < min_var):
@@ -227,9 +214,6 @@ class MachineResMgr(object):
                 min_var = var_mean_of_list
         
         return migrating_machine_running_res, migrating_insts
-
-        
-        
         
         
         
