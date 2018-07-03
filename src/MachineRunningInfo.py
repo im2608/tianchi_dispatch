@@ -47,6 +47,12 @@ class MachineRunningInfo(object):
     def get_cpu_percentage(self):
         return max(self.running_machine_res.cpu_percentage - 0.5, 0) # cpu 使用率低于0.5 的归为一类 6027
 #         return self.running_machine_res.cpu_percentage
+
+    def get_machine_score(self):
+        return max(self.running_machine_res.machine_score - 100, 0) # 得分低于100 的归为一类
+
+    def get_machine_real_score(self):
+        return self.running_machine_res.machine_score
     
     def get_cpu_useage(self):
         return self.running_machine_res.cpu_useage
@@ -59,9 +65,8 @@ class MachineRunningInfo(object):
     def meet_inst_res_require(self, app_res):
         return self.machine_res.meet_inst_res_require(app_res)
     
-    # 是否可以将 app_res 分发到当前机器
-    def can_dispatch(self, app_res, app_constraint_dict):
-        
+    # 是否满足约束条件
+    def meet_constraint(self, app_res, app_constraint_dict):
         # 需要迁入的 app 在当前机器上运行的实例数
         immmigrate_app_running_inst = 0
         if (app_res.app_id in self.running_app_dict):
@@ -73,10 +78,27 @@ class MachineRunningInfo(object):
         for app_id, inst_cnt in self.running_app_dict.items():
             if (app_id in app_constraint_dict and app_res.app_id in app_constraint_dict[app_id] and
                 immmigrate_app_running_inst >= app_constraint_dict[app_id][app_res.app_id]):
-                return False
+                return False        
+
+        return True
+    
+    # 是否可以将 app_res 分发到当前机器
+    def can_dispatch(self, app_res, app_constraint_dict):
+        
+        if (not self.meet_constraint(app_res, app_constraint_dict)):
+            return False        
 
         # 满足约束条件，看剩余资源是否满足
         return self.running_machine_res.meet_inst_res_require(app_res)
+    
+    def try_dispatch(self, app_res, app_constraint_dict):
+        if (not self.can_dispatch(app_res, app_constraint_dict)):
+            return False
+        
+        # 分发之后 cpu 的使用率 > 0.8, 则尝试将 app 分发到其他的机器上
+        dispatch_cpu_per = (self.running_machine_res.cpu_slice + app_res.cpu_slice) / self.running_machine_res.cpu
+        return np.max(dispatch_cpu_per) > 0.8
+        
 
     def dispatch_app(self, inst_id, app_res, app_constraint_dict):
         if (self.can_dispatch(app_res, app_constraint_dict)):
@@ -85,6 +107,23 @@ class MachineRunningInfo(object):
 
         return False
     
+    def try_dispatch_app(self, inst_id, app_res, app_constraint_dict):
+        if (self.try_dispatch(app_res, app_constraint_dict)):
+            self.update_machine_res(inst_id, app_res, DISPATCH_RATIO)
+            return True
+
+        return False    
+    
+    # 将 app 迁出后所减少的分数
+    def migrating_delta_score(self, app_res):
+        score = score_of_cpu_percent_slice((self.running_machine_res.cpu_slice - app_res.cpu_slice) / self.machine_res.cpu)
+        return self.get_machine_real_score() - score  
+    
+    # 将 app 迁入后所增加的分数
+    def immigrating_delta_score(self, app_res):
+        score = score_of_cpu_percent_slice((self.running_machine_res.cpu_slice + app_res.cpu_slice) / self.machine_res.cpu)
+        return score - self.get_machine_real_score()   
+
     def release_app(self, inst_id, app_res):
         if (inst_id in self.running_inst_list):
             self.update_machine_res(inst_id, app_res, RELEASE_RATIO)
@@ -120,22 +159,22 @@ class MachineRunningInfo(object):
             if (len(candidate_insts) == 0 or len(candidate_insts) <= inst_list_size):
                 break
 
-        # 在所有符合条件的可迁出 app list 中， 找到所有资源方差的均值最小的一个作为该 machine 的迁出 app list
+        # 在所有符合条件的可迁出 app list 中， 找到在当前机器上得分最高的作为迁出列表
         if (len(candidate_apps_list_of_machine) > 0):
-            min_sum = 1e9
-            min_idx = 0
+            max_score = 0
+            max_idx = 0
             for i, each_candidate_list in enumerate(candidate_apps_list_of_machine):
-                sum_of_list = AppRes.get_var_mean_of_apps(each_candidate_list, inst_app_dict, app_res_dict)
-                if (sum_of_list < min_sum):
-                    min_sum = sum_of_list
-                    min_idx = i
+                score_of_list = AppRes.get_socre_of_apps(each_candidate_list, inst_app_dict, app_res_dict, self.machine_res.cpu)
+                if (score_of_list < max_score):
+                    score_of_list = score_of_list
+                    max_idx = i
                     
             end_time = time.time()
             
             print(getCurrentTime(), " done, running inst len %d, ran %d seconds" % \
                   (len(self.running_inst_list), end_time - start_time))
 
-            return candidate_apps_list_of_machine[min_idx]
+            return candidate_apps_list_of_machine[max_idx], max_score
         else:
             return []
         

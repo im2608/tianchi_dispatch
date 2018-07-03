@@ -21,6 +21,8 @@ class MachineRes(object):
         self.cpu_slice = np.array(np.zeros(SLICE_CNT))  # cpu 使用量
         self.mem_slice  = np.array(np.zeros(SLICE_CNT)) # mem 使用量
         self.cpu_percentage = 0 # cpu 使用率 = cpu slice max 使用量 / cpu 容量
+        
+        self.machine_score = 0
     
         # 剩余可用资源
         self.res_sum = 1 - self.cpu_percentage + self.mem + self.disk + self.p + self.m + self.pm
@@ -59,6 +61,8 @@ class MachineRes(object):
         self.pm += ratio * app_res.pm
         
         self.cpu_percentage = self.cpu_slice.max() / self.cpu
+        
+        self.machine_score = score_of_cpu_percent_slice(self.cpu_slice / self.cpu)
         
     # 机器资源是否能够容纳 inst
     def meet_inst_res_require(self, app_res):

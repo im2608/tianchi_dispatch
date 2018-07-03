@@ -80,7 +80,6 @@ def reverse_machine():
     machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources.csv' % runningPath, 'r'))
     output_file = open(r'%s\..\input\machine_resources_reverse.csv' % runningPath, 'w')
 
-
     machine_res_list = []
     for each_machine in machine_res_csv:
         machine_res_list.append(each_machine)

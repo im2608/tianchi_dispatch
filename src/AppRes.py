@@ -51,3 +51,14 @@ class AppRes(object):
             sum_var += app_res_dict[inst_app_dict[each_inst][0]].res_var
 
         return sum_var / len(inst_list)
+    
+    @staticmethod
+    # 得到迁出的 app list 在 machine 上的分数
+    def get_socre_of_apps(inst_list, inst_app_dict, app_res_dict, machine_cpu):
+        cpu_slice_per = np.array(np.zeros(SLICE_CNT))
+        for each_inst in inst_list:
+            cpu_slice_per += app_res_dict[inst_app_dict[each_inst][0]].cpu_slice
+            
+        cpu_slice_per /= machine_cpu
+        
+        return score_of_cpu_percent_slice(cpu_slice_per)
