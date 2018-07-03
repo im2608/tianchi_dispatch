@@ -55,6 +55,11 @@ class MachineRes(object):
     def update_machine_res(self, app_res, ratio):
         self.mem_slice += (-ratio) * app_res.mem_slice
         self.cpu_slice += (-ratio) * app_res.cpu_slice
+        
+        # slice 由于误差可能不会为0， 这里凡是 < 0.001 的slice 都设置成0
+        self.cpu_slice = np.where(np.less(self.cpu_slice, 0.001), 0, self.cpu_slice)
+        self.mem_slice = np.where(np.less(self.mem_slice, 0.001), 0, self.mem_slice)
+
         self.disk += ratio * app_res.disk
         self.p += ratio * app_res.p
         self.m += ratio * app_res.m

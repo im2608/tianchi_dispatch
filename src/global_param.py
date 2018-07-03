@@ -30,5 +30,9 @@ def split_slice(slice):
     return np.array(list(map(float, slice.split('|'))))
 
 def score_of_cpu_percent_slice(slice):
-    return np.where(np.greater(slice, 0.5), 1 + 10 * (np.exp(slice - 0.5) - 1), 1).sum()
+    return np.where(np.greater(slice, 0), \
+                    1 + 10 * (np.exp(np.maximum(0, slice - 0.5)) - 1), \
+                    0).sum()
+
+#     return np.where(np.greater(slice, 0.5), 1 + 10 * (np.exp(slice - 0.5) - 1), 1).sum()
     

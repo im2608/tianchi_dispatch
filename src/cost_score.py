@@ -70,6 +70,59 @@ class AdjustDispatch(object):
     def sorte_machine(self):
         self.sorted_machine_cost = sorted(self.machine_runing_info_dict.items(), key = lambda d : d[1].get_machine_real_score(), reverse = True)
         
+    # 从得分最低的机器上迁出所有的 inst, 如果增加的分数 < 98, 则可行 
+    def adj_dispatch_reverse(self):
+        for machine_idx in range(len(self.sorted_machine_cost) - 1, -1, -1):
+            machine_id = self.sorted_machine_cost[machine_idx][0]
+            lightest_load_machine = self.machine_runing_info_dict[machine_id]
+            if (len(lightest_load_machine.running_inst_list) > 0):
+                break
+
+        migrating_machine_dict = {}
+        for each_inst in lightest_load_machine.running_inst_list:
+            app_res = self.app_res_dict[self.inst_app_dict[each_inst][0]]
+            min_delta_score = 1e9 # 将 inst 迁出后减少的分数 - 将 inst 迁入后增加的分数, 找到最大的 max delta
+    
+            for i in range(machine_idx):
+                machine_id = self.sorted_machine_cost[i][0]
+
+                heavy_load_machine = self.machine_runing_info_dict[machine_id]            
+    
+                if (heavy_load_machine.can_dispatch(app_res, self.app_constraint_dict)):
+                    # 将 inst 迁入后增加的分数
+                    increased_score = heavy_load_machine.immigrating_delta_score(self.app_res_dict[self.inst_app_dict[each_inst][0]])
+                    if (increased_score < min_delta_score):
+                        min_delta_score = increased_score
+                        migrating_machine_dict[each_inst] = (machine_id, increased_score)
+                        # 迁入后没有增加分数， 最好的结果， 无需继续查找
+                        if (increased_score == 0):
+                            break
+        sum_increated_score = 0
+        for each_inst, (machine_id, score) in migrating_machine_dict.items():
+            sum_increated_score += score
+            
+        # 增加的分数 > 98, 不可行 
+        if (sum_increated_score > 98):
+            return self.cost
+
+        for each_inst, (migrating_machine, score) in migrating_machine_dict.items():
+            app_res = self.app_res_dict[self.inst_app_dict[each_inst][0]]
+            
+            # 迁入
+            self.machine_runing_info_dict[migrating_machine].dispatch_app(each_inst, app_res, self.app_constraint_dict)
+    
+            lightest_load_machine.release_app(each_inst, app_res) # 迁出 inst
+            self.insts_running_machine_dict[each_inst] = migrating_machine # 更新 running dit
+    
+        self.sorted_machine_cost = sorted(self.machine_runing_info_dict.items(), \
+                                     key = lambda d : d[1].get_machine_real_score(), reverse = True) # 排序
+        
+        # 迁移之后重新计算得分，分数降低的话则继续尝试
+        next_cost = 0
+        for machine_id, machine_running_res in self.sorted_machine_cost:
+            next_cost += machine_running_res.get_machine_real_score()        
+        
+        return next_cost        
     
     def adj_dispatch(self):
         # 得分最高的机器
@@ -150,13 +203,19 @@ class AdjustDispatch(object):
         if (self.sorted_machine_cost[-1][1].get_machine_real_score() > 98):
             return self.cost;
         
-        next_cost = self.adj_dispatch();
-        
-        
+        print(getCurrentTime(), 'optimizing for L -> H')
+        next_cost = self.adj_dispatch_reverse()        
         while (next_cost < self.cost):
             print(getCurrentTime(), 'cost is optimized from %f to %f' % (self.cost, next_cost))
             self.cost = next_cost
-            next_cost = self.adj_dispatch(); 
+            next_cost = self.adj_dispatch_reverse() 
+
+        print(getCurrentTime(), 'optimizing for H -> L')
+        next_cost = self.adj_dispatch()
+        while (next_cost < self.cost):
+            print(getCurrentTime(), 'cost is optimized from %f to %f' % (self.cost, next_cost))
+            self.cost = next_cost
+            next_cost = self.adj_dispatch()
 
         with open(r'%s\..\output\%s_optimized.csv' % (runningPath, self.submit_filename), 'w') as output_file:
             for inst_id, machine_id in self.insts_running_machine_dict.items():
