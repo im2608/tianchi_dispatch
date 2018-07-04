@@ -35,26 +35,26 @@ class MachineResMgr(object):
         machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources.csv' % runningPath, 'r'))
 #         machine_res_csv = csv.reader(open(r'%s\..\input\part_normal_machine.csv' % runningPath, 'r'))
         for each_machine in machine_res_csv:
-            machine_id = each_machine[0]
+            machine_id = int(each_machine[0])
             self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
             
         self.app_res_dict = {}
         app_res_csv = csv.reader(open(r'%s\..\input\app_resources.csv' % runningPath, 'r'))
         for each_app in app_res_csv:
-            app_id = each_app[0]
+            app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
 
         self.inst_app_dict = {}
         inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
         for each_inst in inst_app_csv:
-            inst_id = each_inst[0]
-            self.inst_app_dict[inst_id] = (each_inst[1], each_inst[2]) # app id, machine id
+            inst_id = int(each_inst[0])
+            self.inst_app_dict[inst_id] = int(each_inst[1]) # app id
 
         self.app_constraint_dict = {}
         app_cons_csv = csv.reader(open(r'%s\..\input\app_interference.csv' % runningPath, 'r'))
         for each_cons in app_cons_csv:
-            app_id_a = each_cons[0]
-            app_id_b = each_cons[1]
+            app_id_a = int(each_cons[0])
+            app_id_b = int(each_cons[1])
             if (app_id_a not in self.app_constraint_dict):
                 self.app_constraint_dict[app_id_a] = {}
 
@@ -65,7 +65,7 @@ class MachineResMgr(object):
 
         self.output_file = open(r'%s\..\output\submit_%s.csv' % (runningPath, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'w')
         
-        self.sore_machine()
+        self.sort_machine()
         
         self.machine_lock = threading.Lock()
         self.candidate_lock = threading.Lock()
@@ -81,7 +81,7 @@ class MachineResMgr(object):
     # 迁出的 inst 需要重新分发到其他机器，此时会递归调用 dispatch_cpp, skipped_machine_id 就是迁出 inst 的机器，
     # 重新分发迁出的 inst 时应该跳过该机器
     def dispatch_inst(self, inst_id, skipped_machine_id):
-        app_res = self.app_res_dict[self.inst_app_dict[inst_id][0]]
+        app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
 
         if (skipped_machine_id is not None and len(skipped_machine_id) == len(self.machine_runing_info_dict)):
             cpu_slice, mem_slice, disk, p, m, pm = MachineRes.sum_machine_remaining_res(self.sorted_machine_res)
@@ -101,7 +101,7 @@ class MachineResMgr(object):
 
             machine_running_res = self.machine_runing_info_dict[machine_id]
             if (machine_running_res.dispatch_app(inst_id, app_res, self.app_constraint_dict)): 
-                self.sore_machine()
+                self.sort_machine()
                 self.output_file.write('%s,%s\n' % (inst_id, machine_id))
                 return True            
 
@@ -142,11 +142,11 @@ class MachineResMgr(object):
                      (inst_id, app_res.app_id, migrating_machine_running_res.machine_res.machine_id, migrating_insts))
 
         for each_inst in migrating_insts:
-            migrating_machine_running_res.release_app(each_inst, self.app_res_dict[self.inst_app_dict[each_inst][0]])
+            migrating_machine_running_res.release_app(each_inst, self.app_res_dict[self.inst_app_dict[each_inst]])
 
         # 迁出一些 inst 后，当前机器可以分发 inst
         if (migrating_machine_running_res.dispatch_app(inst_id, app_res, self.app_constraint_dict)):
-            self.sore_machine()
+            self.sort_machine()
         else:
             print(getCurrentTime(), 'ERROR, dispatch instance %s failed after migrating %s on machine %s' % \
                   (inst_id, migrating_insts, migrating_machine_running_res.machine_res.machine_id))
@@ -162,7 +162,7 @@ class MachineResMgr(object):
 
         return True
     
-    def sore_machine(self):
+    def sort_machine(self):
         self.sort_machine_by_score()
 
     # 按照 get_cpu_percentage 从低到高排序, 优先分配使用率低的机器
@@ -184,7 +184,7 @@ class MachineResMgr(object):
 
             machine_id = self.sorted_machine_res[machine_idx][0]        
             machine_running_res = self.machine_runing_info_dict[machine_id]
-            app_res = self.app_res_dict[self.inst_app_dict[inst_id][0]]
+            app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
     
             if ((skipped_machine_id is not None and machine_id in skipped_machine_id) or 
                 # 在当前机器能够容纳 inst 时， 才需要查找迁出列表

@@ -29,7 +29,7 @@ def main():
     inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
     i = 0
     for each_inst in inst_app_csv:
-        inst_id = each_inst[0]
+        inst_id = int(each_inst[0])
         if (not res_mgr.dispatch_inst(inst_id, None)):
             break
 

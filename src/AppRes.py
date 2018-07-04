@@ -4,7 +4,7 @@ import numpy as np
 
 class AppRes(object):
     def __init__(self, each_app):
-        self.app_id = each_app[0]
+        self.app_id = int(each_app[0])
         self.cpu_slice = np.array(list(map(float, each_app[1].split('|'))))
         self.mem_slice = np.array(list(map(float, each_app[2].split('|'))))
         self.disk = int(each_app[3])
@@ -34,7 +34,7 @@ class AppRes(object):
         pm = 0
         
         for each_inst in inst_list:
-            app_res = app_res_dict[inst_app_dict[each_inst][0]]
+            app_res = app_res_dict[inst_app_dict[each_inst]]
             cpu_slice += app_res.cpu_slice
             mem_slice += app_res.mem_slice
             disk += app_res.disk
@@ -48,7 +48,7 @@ class AppRes(object):
     def get_var_mean_of_apps(inst_list, inst_app_dict, app_res_dict):
         sum_var = 0
         for each_inst in inst_list:
-            sum_var += app_res_dict[inst_app_dict[each_inst][0]].res_var
+            sum_var += app_res_dict[inst_app_dict[each_inst]].res_var
 
         return sum_var / len(inst_list)
     
@@ -57,7 +57,7 @@ class AppRes(object):
     def get_socre_of_apps(inst_list, inst_app_dict, app_res_dict, machine_cpu):
         cpu_slice_per = np.array(np.zeros(SLICE_CNT))
         for each_inst in inst_list:
-            cpu_slice_per += app_res_dict[inst_app_dict[each_inst][0]].cpu_slice
+            cpu_slice_per += app_res_dict[inst_app_dict[each_inst]].cpu_slice
             
         cpu_slice_per /= machine_cpu
         

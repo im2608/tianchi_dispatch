@@ -9,7 +9,7 @@ import numpy as np
 
 class MachineRes(object):
     def __init__(self, each_machine):
-        self.machine_id = each_machine[0]
+        self.machine_id = int(each_machine[0])
         self.cpu = float(each_machine[1]) # cpu 容量
         self.mem = float(each_machine[2]) # mem
         self.disk = float(each_machine[3]) # 剩余 disk

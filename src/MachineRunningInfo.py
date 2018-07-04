@@ -37,7 +37,7 @@ class MachineRunningInfo(object):
     
     def print_remaining_res(self, inst_app_dict, app_res_dict):
         for each_inst in self.running_inst_list:
-            print(getCurrentTime(), '%s, %s ' % (each_inst, app_res_dict[inst_app_dict[each_inst][0]].to_string()))
+            print(getCurrentTime(), '%s, %s ' % (each_inst, app_res_dict[inst_app_dict[each_inst]].to_string()))
             
         print(getCurrentTime(), self.running_machine_res.to_string())
     
@@ -187,7 +187,7 @@ class MachineRunningInfo(object):
             cpu_slice, mem_slice, disk_usg, p_usg, m_usg, pm_usg = AppRes.sum_app_res(cur_inst_list, inst_app_dict, app_res_dict)
 
             # 候选的迁出 app list 资源加上剩余的资源 满足迁入的  app cpu， 保存起来作为迁出的 app list 候选
-            immigrating_app_res = app_res_dict[inst_app_dict[immgrate_inst_id][0]]
+            immigrating_app_res = app_res_dict[inst_app_dict[immgrate_inst_id]]
             if (np.all(cpu_slice + self.running_machine_res.cpu_slice >= immigrating_app_res.cpu_slice) and 
                 np.all(mem_slice + self.running_machine_res.mem >= immigrating_app_res.mem_slice) and 
                 disk_usg + self.running_machine_res.disk >= immigrating_app_res.disk and 
