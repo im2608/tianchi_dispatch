@@ -34,7 +34,25 @@ class MachineRunningInfo(object):
                 self.running_app_dict.pop(app_res.app_id)
 
         return True
-    
+
+    # 查找机器上的 running inst list 是否有违反约束的 inst
+    def any_self_violate_constriant(self, inst_app_dict, app_res_dict, app_constraint_dict):
+        for inst_a in self.running_inst_list:
+            app_res_a = app_res_dict[inst_app_dict[inst_a]]
+            for inst_b in self.running_inst_list:
+                app_res_b = app_res_dict[inst_app_dict[inst_b]]
+                immmigrate_app_b_running_inst = self.running_app_dict[app_res_b.app_id]
+
+                # 存在 app_a, app_b, k 约束
+                if (app_res_a.app_id in app_constraint_dict and app_res_b.app_id in app_constraint_dict[app_res_a.app_id]):
+                    if (app_res_a.app_id == app_res_b.app_id):
+                        if (immmigrate_app_b_running_inst > app_constraint_dict[app_res_a.app_id][app_res_b.app_id] + 1):                         
+                            return inst_b
+                    else:
+                        if (immmigrate_app_b_running_inst > app_constraint_dict[app_res_a.app_id][app_res_b.app_id]):
+                            return inst_b
+        return None
+
     def print_remaining_res(self, inst_app_dict, app_res_dict):
         for each_inst in self.running_inst_list:
             print(getCurrentTime(), '%s, %s ' % (each_inst, app_res_dict[inst_app_dict[each_inst]].to_string()))
@@ -65,7 +83,7 @@ class MachineRunningInfo(object):
     def meet_inst_res_require(self, app_res):
         return self.machine_res.meet_inst_res_require(app_res)
     
-    # 是否满足约束条件
+    # 迁入 app_res 是否满足约束条件
     def meet_constraint(self, app_res, app_constraint_dict):
         # 需要迁入的 app 在当前机器上运行的实例数
         immmigrate_app_running_inst = 0
@@ -76,11 +94,61 @@ class MachineRunningInfo(object):
         # 不满足约束的情况下 1. 不能部署在当前机器上，  2. 迁移走某些 app 使得可以部署
         # 当前先实现 1
         for app_id, inst_cnt in self.running_app_dict.items():
-            if (app_id in app_constraint_dict and app_res.app_id in app_constraint_dict[app_id] and
-                immmigrate_app_running_inst >= app_constraint_dict[app_id][app_res.app_id]):
-                return False        
+            # 机器上的 app_id 与想要迁入的 app_res.app_id 有约束
+            if (app_id in app_constraint_dict and app_res.app_id in app_constraint_dict[app_id]):
+                if (app_id == app_res.app_id):
+                    return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id] + 1
+                else:
+                    return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id]
+                
+             # 要迁入的 app_res.app_id 与机器上的 app_id 有约束
+            if (app_res.app_id in app_constraint_dict and app_id in app_constraint_dict[app_res.app_id]):
+                return inst_cnt < app_constraint_dict[app_res.app_id][app_id]
 
         return True
+    
+    # 迁入一个 app list 是否满足约束条件
+    def meet_constraint_ex(self, inst_list, inst_app_dict, app_res_dict, app_constraint_dict):
+        tmp_running_app_dict = self.running_app_dict.copy()
+        
+        for each_inst in inst_list:
+            app_res = app_res_dict[inst_app_dict[each_inst]]
+            # 需要迁入的 app 在当前机器上运行的实例数
+            immmigrate_app_running_inst = 0
+            if (app_res.app_id in tmp_running_app_dict):
+                immmigrate_app_running_inst = tmp_running_app_dict[app_res.app_id]
+    
+            # 在当前机器上运行的 app 与需要迁入的 app 是否有约束，有约束的话看 immmigrate_app_running_inst 是否满足约束条件
+            # 不满足约束的情况下 1. 不能部署在当前机器上，  2. 迁移走某些 app 使得可以部署
+            # 当前先实现 1
+            for app_id, inst_cnt in tmp_running_app_dict.items():
+                if (app_id in app_constraint_dict and app_res.app_id in app_constraint_dict[app_id]):
+                    if (app_id == app_res.app_id):
+                        return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id] + 1
+                    else:
+                        return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id]
+
+                 # 要迁入的 app_res.app_id 与机器上的 app_id 有约束
+                if (app_res.app_id in app_constraint_dict and app_id in app_constraint_dict[app_res.app_id]):
+                    return inst_cnt < app_constraint_dict[app_res.app_id][app_id]
+
+            if (app_res.app_id not in tmp_running_app_dict):
+                tmp_running_app_dict[app_res.app_id] = 1
+
+            tmp_running_app_dict[app_res.app_id] += 1
+
+        return True
+
+    # 是否可以将 app_res_list 分发到当前机器
+    def can_dispatch_ex(self, inst_list, inst_app_dict, app_res_dict, app_constraint_dict):
+        if (not self.meet_constraint_ex(inst_list, inst_app_dict, app_res_dict, app_constraint_dict)):
+            return False
+        
+        tmp_app_res = AppRes.sum_app_res_by_inst(inst_list, inst_app_dict, app_res_dict)
+        
+        # 满足约束条件，看剩余资源是否满足
+        return self.running_machine_res.meet_inst_res_require(tmp_app_res)
+    
     
     # 是否可以将 app_res 分发到当前机器
     def can_dispatch(self, app_res, app_constraint_dict):
@@ -91,15 +159,6 @@ class MachineRunningInfo(object):
         # 满足约束条件，看剩余资源是否满足
         return self.running_machine_res.meet_inst_res_require(app_res)
     
-    def try_dispatch(self, app_res, app_constraint_dict):
-        if (not self.can_dispatch(app_res, app_constraint_dict)):
-            return False
-        
-        # 分发之后 cpu 的使用率 > 0.8, 则尝试将 app 分发到其他的机器上
-        dispatch_cpu_per = (self.running_machine_res.cpu_slice + app_res.cpu_slice) / self.running_machine_res.cpu
-        return np.max(dispatch_cpu_per) > 0.8
-        
-
     def dispatch_app(self, inst_id, app_res, app_constraint_dict):
         if (self.can_dispatch(app_res, app_constraint_dict)):
             self.update_machine_res(inst_id, app_res, DISPATCH_RATIO)
@@ -107,16 +166,11 @@ class MachineRunningInfo(object):
 
         return False
     
-    def try_dispatch_app(self, inst_id, app_res, app_constraint_dict):
-        if (self.try_dispatch(app_res, app_constraint_dict)):
-            self.update_machine_res(inst_id, app_res, DISPATCH_RATIO)
-            return True
-
-        return False    
-    
     # 将 app 迁出后所减少的分数
     def migrating_delta_score(self, app_res):
-        score = score_of_cpu_percent_slice((self.running_machine_res.cpu_slice - app_res.cpu_slice) / self.machine_res.cpu)
+        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice
+        tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
+        score = score_of_cpu_percent_slice(tmp / self.machine_res.cpu)
         return self.get_machine_real_score() - score  
     
     # 将 app 迁入后所增加的分数
@@ -128,7 +182,7 @@ class MachineRunningInfo(object):
         if (inst_id in self.running_inst_list):
             self.update_machine_res(inst_id, app_res, RELEASE_RATIO)
             return True
-        
+
         return False
 
     # 为了将  immgrate_inst_id 迁入， 需要将 running_inst_list 中的一个或多个 inst 迁出，
@@ -168,7 +222,7 @@ class MachineRunningInfo(object):
                 if (score_of_list < max_score):
                     score_of_list = score_of_list
                     max_idx = i
-                    
+
             end_time = time.time()
             
             print(getCurrentTime(), " done, running inst len %d, ran %d seconds" % \
@@ -184,16 +238,16 @@ class MachineRunningInfo(object):
                             candidate_apps_list, immgrate_inst_id, inst_app_dict, app_res_dict, app_constraint_dict):
         if (left_inst_list_size == 0):
             # 将要迁出的资源之和
-            cpu_slice, mem_slice, disk_usg, p_usg, m_usg, pm_usg = AppRes.sum_app_res(cur_inst_list, inst_app_dict, app_res_dict)
+            tmp_app_res = AppRes.sum_app_res_by_inst(cur_inst_list, inst_app_dict, app_res_dict)
 
             # 候选的迁出 app list 资源加上剩余的资源 满足迁入的  app cpu， 保存起来作为迁出的 app list 候选
             immigrating_app_res = app_res_dict[inst_app_dict[immgrate_inst_id]]
-            if (np.all(cpu_slice + self.running_machine_res.cpu_slice >= immigrating_app_res.cpu_slice) and 
-                np.all(mem_slice + self.running_machine_res.mem >= immigrating_app_res.mem_slice) and 
-                disk_usg + self.running_machine_res.disk >= immigrating_app_res.disk and 
-                p_usg + self.running_machine_res.p >= immigrating_app_res.p and 
-                m_usg + self.running_machine_res.m >= immigrating_app_res.m and
-                pm_usg + self.running_machine_res.pm >= immigrating_app_res.pm):
+            if (np.all(tmp_app_res.cpu_slice + self.running_machine_res.cpu_slice >= immigrating_app_res.cpu_slice) and 
+                np.all(tmp_app_res.mem_slice + self.running_machine_res.mem >= immigrating_app_res.mem_slice) and 
+                tmp_app_res.disk_usg + self.running_machine_res.disk >= immigrating_app_res.disk and 
+                tmp_app_res.p_usg + self.running_machine_res.p >= immigrating_app_res.p and 
+                tmp_app_res.m_usg + self.running_machine_res.m >= immigrating_app_res.m and
+                tmp_app_res.pm_usg + self.running_machine_res.pm >= immigrating_app_res.pm):
                 candidate_apps_list.append(cur_inst_list)
             return 
         

@@ -30,6 +30,7 @@ class MachineResMgr(object):
                             filemode='w')
 
         #  记录 machine 的运行信息， 包括 cpu 使用量,  cpu 使用率 = cpu 使用量 / cpu 容量， d, p, m, pm, app list
+        print(getCurrentTime(), 'loading machine_resources.csv...')
         self.machine_runing_info_dict = {} 
 #         machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources_reverse.csv' % runningPath, 'r'))
         machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources.csv' % runningPath, 'r'))
@@ -38,18 +39,26 @@ class MachineResMgr(object):
             machine_id = int(each_machine[0])
             self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
             
+        print(getCurrentTime(), 'loading app_resources.csv...')
         self.app_res_dict = {}
         app_res_csv = csv.reader(open(r'%s\..\input\app_resources.csv' % runningPath, 'r'))
         for each_app in app_res_csv:
             app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
 
+        self.migrating_list = []
+        print(getCurrentTime(), 'loading instance_deploy.csv...')
         self.inst_app_dict = {}
         inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
         for each_inst in inst_app_csv:
             inst_id = int(each_inst[0])
-            self.inst_app_dict[inst_id] = int(each_inst[1]) # app id
+            app_id = int(each_inst[1])
+            self.inst_app_dict[inst_id]  = app_id
+            if (len(each_inst[2]) > 0):
+                machine_id = int(each_inst[2])
+                self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
 
+        print(getCurrentTime(), 'loading app_interference.csv...')
         self.app_constraint_dict = {}
         app_cons_csv = csv.reader(open(r'%s\..\input\app_interference.csv' % runningPath, 'r'))
         for each_cons in app_cons_csv:
@@ -58,14 +67,11 @@ class MachineResMgr(object):
             if (app_id_a not in self.app_constraint_dict):
                 self.app_constraint_dict[app_id_a] = {}
 
-#             if (app_id_b not in self.app_constraint_dict):
-#                 self.app_constraint_dict[app_id_b] = {}
-
             self.app_constraint_dict[app_id_a][app_id_b] = int(each_cons[2])
 
-        self.output_file = open(r'%s\..\output\submit_%s.csv' % (runningPath, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'w')
-        
         self.sort_machine()
+        
+        self.init_deploying()
         
         self.machine_lock = threading.Lock()
         self.candidate_lock = threading.Lock()
@@ -74,6 +80,49 @@ class MachineResMgr(object):
         
         self.machine_idx = 0
         
+        return
+    
+    # 初始化状态，将不满足约束的 inst 迁移出去
+    def init_deploying(self):
+        print(getCurrentTime(), 'init_deploying...')
+        index = 0
+        for machine_id, violate_machine_running_res in self.sorted_machine_res:
+            if (index  % 100 == 0):
+                print(getCurrentTime(), '%d machine initialized\r' % index, end='')
+            index += 1
+
+            if (len(violate_machine_running_res.running_inst_list) == 0 or len(violate_machine_running_res.running_inst_list) == 1):
+                continue
+
+            # 查找机器上的 running inst list 是否有违反约束的 inst
+            # 对于 <app_a, app_a, 0> 这样的约束，也会将 app_a 迁移出来
+            violate_inst_id = violate_machine_running_res.any_self_violate_constriant(self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)
+            while (violate_inst_id is not None):
+                # 当前 machine_id 上有违反约束的 inst， 将其迁移到迁入分数最小的机器上
+                min_score = 1e9
+                violate_app_res = self.app_res_dict[self.inst_app_dict[violate_inst_id]]
+
+                for each_machine_id, immigrate_machine_running_res in self.sorted_machine_res:      
+                    if (each_machine_id == machine_id):
+                        continue
+
+                    if (immigrate_machine_running_res.can_dispatch(violate_app_res, self.app_constraint_dict)):
+                        immigrating_score = immigrate_machine_running_res.immigrating_delta_score(violate_app_res)
+                        if (immigrating_score < min_score):
+                            min_score = immigrating_score
+                            immigrating_machine = each_machine_id
+
+                            if (immigrating_score == 0):
+                                break
+                   
+                if (not self.machine_runing_info_dict[immigrating_machine].dispatch_app(violate_inst_id, violate_app_res, self.app_constraint_dict)):
+                    print_and_log("ERROR! Failed to migrate inst %d to machine %d" % (violate_inst_id, immigrating_machine))
+                    exit(-1)
+                
+                violate_machine_running_res.release_app(violate_inst_id, violate_app_res)
+                self.migrating_list.append('inst_%d,machine_%d' % (violate_inst_id, immigrating_machine))
+                
+                violate_inst_id = violate_machine_running_res.any_self_violate_constriant(self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)
         return
  
     # 分发 inst_id 到  machine_id, 将分发好的信息写入文件
@@ -94,16 +143,30 @@ class MachineResMgr(object):
 
         # 排好序的 sorted_machine_res 中的 machine_res 是个 tuple， 不可修改，根据 machine_id 到  machine_runing_info_dict 
         # 中去更新
+        # 在所有可迁入的机器中，找到一个迁入分数最小的
+        min_immigrating_score = 1e9
         for machine_info_tuple in self.sorted_machine_res:
             machine_id =  machine_info_tuple[0]
             if (skipped_machine_id is not None and machine_id in skipped_machine_id):
                 continue
 
             machine_running_res = self.machine_runing_info_dict[machine_id]
-            if (machine_running_res.dispatch_app(inst_id, app_res, self.app_constraint_dict)): 
-                self.sort_machine()
-                self.output_file.write('%s,%s\n' % (inst_id, machine_id))
-                return True            
+            if (machine_running_res.can_dispatch(app_res, self.app_constraint_dict)):
+                immigrating_score = machine_running_res.immigrating_delta_score(app_res)
+                if (immigrating_score < min_immigrating_score):
+                    min_immigrating_score = immigrating_score
+                    immigrating_machine = machine_id
+                    if (immigrating_score == 0):
+                        break
+
+        if (min_immigrating_score < 1e9):
+            if (self.machine_runing_info_dict[immigrating_machine].dispatch_app(inst_id, app_res, self.app_constraint_dict)): 
+                self.sort_machine()       
+                self.migrating_list.append('inst_%d,machine_%d' % (inst_id, immigrating_machine))         
+                return True
+            else:
+                print("ERROR! Failed to immigrate inst %d to machine %d" % (inst_id, immigrating_machine))
+                return False
 
         # 没有能分配当前 inst 的机器，在每台机器上得到可迁出的 app list， 在最长的 app list 的机器上迁出
         print(getCurrentTime(), 'no machine could dispatch inst %s, finding some migrating insts' % (inst_id))
@@ -162,16 +225,16 @@ class MachineResMgr(object):
 
         return True
     
-    def sort_machine(self):
-        self.sort_machine_by_score()
+    def sort_machine(self, reverse = False):
+        self.sort_machine_by_score(reverse)
 
     # 按照 get_cpu_percentage 从低到高排序, 优先分配使用率低的机器
     def sort_machine_by_cpu_per(self):
         self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key=lambda d:d[1].get_cpu_percentage())
 
     # 按照 机器的得分 从低到高排序, 优先分配得分低的机器
-    def sort_machine_by_score(self):
-        self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key=lambda d:d[1].get_machine_score())
+    def sort_machine_by_score(self, reverse):
+        self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key=lambda d:d[1].get_machine_score(), reverse=reverse)
 
     def search_machine_immigrate_list(self, inst_id, skipped_machine_id, machine_start, machine_end, childEnd):
         migrating_machine_id = None
@@ -221,6 +284,16 @@ class MachineResMgr(object):
         self.machine_idx += 1
         self.machine_lock.release()
         return tmp
+
+    def output_submition(self):
+        filename = 'submit_%s.csv' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = open(r'%s\..\output\%s' % (runningPath, filename), 'w')
+        print(getCurrentTime(), 'writing output file %s' % filename)
+
+        for each_migrating in self.migrating_list:
+            output_file.write('%s\n' % (each_migrating))
+
+        output_file.close()
 
     @staticmethod
     def search_immigrate_list_func(machine_res_mgr, inst_id, skipped_machine_id, machine_start, machine_end, childEnd):

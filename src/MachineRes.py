@@ -11,7 +11,7 @@ class MachineRes(object):
     def __init__(self, each_machine):
         self.machine_id = int(each_machine[0])
         self.cpu = float(each_machine[1]) # cpu 容量
-        self.mem = float(each_machine[2]) # mem
+        self.mem = float(each_machine[2]) #  mem
         self.disk = float(each_machine[3]) # 剩余 disk
         self.p = float(each_machine[4]) # 剩余 p
         self.m = float(each_machine[5]) # 剩余 m

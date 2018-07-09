@@ -7,6 +7,7 @@ Created on May 17, 2018
 import sys
 import time
 import numpy as np
+import logging
 
 runningPath = sys.path[0]
 sys.path.append("%s\\features\\" % runningPath)
@@ -34,5 +35,8 @@ def score_of_cpu_percent_slice(slice):
                     1 + 10 * (np.exp(np.maximum(0, slice - 0.5)) - 1), \
                     0).sum()
 
+def print_and_log(msg):
+    print(getCurrentTime(), msg)
+    logging.info(msg)
 #     return np.where(np.greater(slice, 0.5), 1 + 10 * (np.exp(slice - 0.5) - 1), 1).sum()
     
