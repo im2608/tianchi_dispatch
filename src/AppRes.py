@@ -39,7 +39,7 @@ class AppRes(object):
         tmp_app_res = AppRes(None)
         
         for each_inst in inst_list:
-            app_res = app_res_dict[inst_app_dict[each_inst][0]]
+            app_res = app_res_dict[inst_app_dict[each_inst]]
             tmp_app_res.cpu_slice += app_res.cpu_slice
             tmp_app_res.mem_slice += app_res.mem_slice
             tmp_app_res.disk += app_res.disk
@@ -67,7 +67,7 @@ class AppRes(object):
     def get_var_mean_of_apps(inst_list, inst_app_dict, app_res_dict):
         sum_var = 0
         for each_inst in inst_list:
-            sum_var += app_res_dict[inst_app_dict[each_inst][0]].res_var
+            sum_var += app_res_dict[inst_app_dict[each_inst]].res_var
 
         return sum_var / len(inst_list)
     
@@ -76,8 +76,8 @@ class AppRes(object):
     def get_socre_of_apps(inst_list, inst_app_dict, app_res_dict, machine_cpu):
         cpu_slice_per = np.array(np.zeros(SLICE_CNT))
         for each_inst in inst_list:
-            cpu_slice_per += app_res_dict[inst_app_dict[each_inst][0]].cpu_slice
-            
+            cpu_slice_per += app_res_dict[inst_app_dict[each_inst]].cpu_slice
+
         cpu_slice_per /= machine_cpu
-        
+
         return score_of_cpu_percent_slice(cpu_slice_per)

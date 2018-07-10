@@ -43,7 +43,7 @@ class AdjustDispatch(object):
 
         self.cost = 0 
         
-        self.submit_filename = 'submit_20180708_170621'
+        self.submit_filename = 'submit_20180709_182641_optimized'
         
         log_file = r'%s\..\log\cost_%s.log' % (runningPath, self.submit_filename)
     
@@ -146,9 +146,11 @@ class AdjustDispatch(object):
             next_cost = 0
             for machine_id, machine_running_res in self.sorted_machine_cost:
                 next_cost += machine_running_res.get_machine_real_score()   
-                
+
             print_and_log('migrating %s, increased score %f, next_cost %f' % \
                   (lightest_load_machine.machine_res.machine_id, sum_increated_score, next_cost))
+
+        return next_cost
     
 
     def sum_scores_of_machine(self):
@@ -226,7 +228,7 @@ class AdjustDispatch(object):
     def dispacth_app(self):
         # inst 运行在哪台机器上
         insts_running_machine_dict = dict()
-        
+
         print(getCurrentTime(), 'loading instance_deploy.csv...')
 
         self.inst_app_dict = {}
@@ -255,23 +257,62 @@ class AdjustDispatch(object):
             if (inst_id in insts_running_machine_dict):
                 immigrating_machine = insts_running_machine_dict[inst_id]
                 self.machine_runing_info_dict[immigrating_machine].release_app(inst_id, app_res)
-                
+
             if (not self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
                 self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)
                 print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (inst_id, machine_id))
                 exit(-1)
-            
+
             insts_running_machine_dict[inst_id] = machine_id      
             self.migraring_list.append('inst_%d,machine_%d' % (inst_id, machine_id)) 
 
         self.sorte_machine()
+        
+
+    def check_one_constraince(self, app_A_id, app_B_id, app_B_running_inst):
+        if (app_A_id in self.app_constraint_dict and app_B_id in self.app_constraint_dict[app_A_id]):
+            if (app_A_id == app_B_id):
+                return app_B_running_inst <= self.app_constraint_dict[app_A_id][app_B_id] + 1
+            else:
+                return app_B_running_inst <= self.app_constraint_dict[app_A_id][app_B_id]
+
+        return True
+    
+    def check_constraince(self, machine_running_res):
+        for inst_A in machine_running_res.running_inst_list:
+            app_A = self.app_res_dict[self.inst_app_dict[inst_A]]
+            for inst_B in machine_running_res.running_inst_list:
+                app_B = self.app_res_dict[self.inst_app_dict[inst_B]]
+                app_B_running_cnt = machine_running_res.running_app_dict[app_B.app_id]
+
+                if (not self.check_one_constraince(app_A.app_id, app_B.app_id, app_B_running_cnt)):
+                    return False
+
+        return True
+        
+    def check_dispatching(self, machine_running_res):
+        if (not self.check_constraince(machine_running_res)):
+            return False        
+
+        # 符合约束，检查资源是否满足
+        tmp = AppRes.sum_app_res_by_inst(machine_running_res.running_inst_list, self.inst_app_dict, self.app_res_dict)
+        return machine_running_res.machine_res.meet_inst_res_require(tmp)
+        
     
     def calculate_cost_score(self):
-        
+
         self.dispacth_app()
     
         # 得分从高到低排序        
         cost = self.sum_scores_of_machine()
+    
+        for machine_id, machine_running_res in self.sorted_machine_cost:
+            if (not self.check_dispatching(machine_running_res)):
+                print_and_log('ERROR! machine_%d, score %f, running list %s' % (machine_id, machine_running_res.get_machine_real_score(), machine_running_res.running_inst_list))
+                self.check_dispatching(machine_running_res)
+                return 
+            logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
+        
         print_and_log('cost of %s is %f/%f' % (self.submit_filename, cost, cost/SLICE_CNT))
 
         if (self.sorted_machine_cost[-1][1].get_machine_real_score() > 98):
@@ -280,12 +321,18 @@ class AdjustDispatch(object):
         print(getCurrentTime(), 'optimizing for H -> L')
         logging.info('optimizing for H -> L')
         cost = self.sum_scores_of_machine()
-        next_cost = self.adj_dispatch()
-        while (next_cost < cost):
-            print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
-            cost = next_cost
-            next_cost = self.adj_dispatch()
         
+#         next_cost = self.adj_dispatch()
+#         while (next_cost < cost):
+#             print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
+#             cost = next_cost
+#             next_cost = self.adj_dispatch()
+        
+        next_cost = self.adj_dispatch_reverse()            
+        while (next_cost < cost):
+            print_and_log('After adj_dispatch_reverse(), score %f -> %f' % (cost, next_cost))
+            cost = next_cost
+            next_cost = self.adj_dispatch()        
 #         print(getCurrentTime(), 'optimizing for L -> H')
 #         logging.info('optimizing for L -> H')
 #         self.adj_dispatch_reverse()        

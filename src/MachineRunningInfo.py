@@ -83,6 +83,17 @@ class MachineRunningInfo(object):
     def meet_inst_res_require(self, app_res):
         return self.machine_res.meet_inst_res_require(app_res)
     
+    # 如果符合约束，则可以迁入，则 app_B_running_inst 会 +1， 所以这里用 <, 不能用 <=
+    def check_if_meet_A_B_constraint(self, app_A_id, app_B_id, app_B_running_inst, app_constraint_dict):
+        if (app_A_id in app_constraint_dict and app_B_id in app_constraint_dict[app_A_id]):
+            if (app_A_id == app_B_id):
+                return app_B_running_inst < app_constraint_dict[app_A_id][app_B_id] + 1
+            else:
+                return app_B_running_inst < app_constraint_dict[app_A_id][app_B_id]
+
+        return True
+        
+    
     # 迁入 app_res 是否满足约束条件
     def meet_constraint(self, app_res, app_constraint_dict):
         # 需要迁入的 app 在当前机器上运行的实例数
@@ -94,23 +105,24 @@ class MachineRunningInfo(object):
         # 不满足约束的情况下 1. 不能部署在当前机器上，  2. 迁移走某些 app 使得可以部署
         # 当前先实现 1
         for app_id, inst_cnt in self.running_app_dict.items():
-            # 机器上的 app_id 与想要迁入的 app_res.app_id 有约束
-            if (app_id in app_constraint_dict and app_res.app_id in app_constraint_dict[app_id]):
-                if (app_id == app_res.app_id):
-                    return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id] + 1
-                else:
-                    return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id]
-                
-             # 要迁入的 app_res.app_id 与机器上的 app_id 有约束
-            if (app_res.app_id in app_constraint_dict and app_id in app_constraint_dict[app_res.app_id]):
-                return inst_cnt < app_constraint_dict[app_res.app_id][app_id]
+            if (not self.check_if_meet_A_B_constraint(app_A_id = app_id, 
+                                                      app_B_id = app_res.app_id, 
+                                                      app_B_running_inst = immmigrate_app_running_inst,
+                                                      app_constraint_dict=app_constraint_dict)):
+                return False
+
+            if (not self.check_if_meet_A_B_constraint(app_A_id = app_res.app_id, 
+                                                      app_B_id = app_id,
+                                                      app_B_running_inst = inst_cnt,
+                                                      app_constraint_dict = app_constraint_dict)):
+                return False
 
         return True
     
     # 迁入一个 app list 是否满足约束条件
     def meet_constraint_ex(self, inst_list, inst_app_dict, app_res_dict, app_constraint_dict):
         tmp_running_app_dict = self.running_app_dict.copy()
-        
+
         for each_inst in inst_list:
             app_res = app_res_dict[inst_app_dict[each_inst]]
             # 需要迁入的 app 在当前机器上运行的实例数
@@ -122,18 +134,21 @@ class MachineRunningInfo(object):
             # 不满足约束的情况下 1. 不能部署在当前机器上，  2. 迁移走某些 app 使得可以部署
             # 当前先实现 1
             for app_id, inst_cnt in tmp_running_app_dict.items():
-                if (app_id in app_constraint_dict and app_res.app_id in app_constraint_dict[app_id]):
-                    if (app_id == app_res.app_id):
-                        return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id] + 1
-                    else:
-                        return immmigrate_app_running_inst < app_constraint_dict[app_id][app_res.app_id]
-
-                 # 要迁入的 app_res.app_id 与机器上的 app_id 有约束
-                if (app_res.app_id in app_constraint_dict and app_id in app_constraint_dict[app_res.app_id]):
-                    return inst_cnt < app_constraint_dict[app_res.app_id][app_id]
-
+                if (not self.check_if_meet_A_B_constraint(app_A_id = app_id, 
+                                                          app_B_id = app_res.app_id, 
+                                                          app_B_running_inst = immmigrate_app_running_inst,
+                                                          app_constraint_dict = app_constraint_dict)):
+                    return False
+    
+                if (not self.check_if_meet_A_B_constraint(app_A_id = app_res.app_id, 
+                                                          app_B_id = app_id,
+                                                          app_B_running_inst = inst_cnt,
+                                                          app_constraint_dict = app_constraint_dict)):
+                    return False
+    
+            # 要迁入的 app_res.app_id 都符合 running inst 的约束
             if (app_res.app_id not in tmp_running_app_dict):
-                tmp_running_app_dict[app_res.app_id] = 1
+                tmp_running_app_dict[app_res.app_id] = 0
 
             tmp_running_app_dict[app_res.app_id] += 1
 
@@ -168,14 +183,16 @@ class MachineRunningInfo(object):
     
     # 将 app 迁出后所减少的分数
     def migrating_delta_score(self, app_res):
-        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice
-        tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
-        score = score_of_cpu_percent_slice(tmp / self.machine_res.cpu)
+        tmp = self.running_machine_res.cpu_slice + app_res.cpu_slice # app 迁出后， 剩余的cpu 容量增加
+        
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         return self.get_machine_real_score() - score  
     
     # 将 app 迁入后所增加的分数
     def immigrating_delta_score(self, app_res):
-        score = score_of_cpu_percent_slice((self.running_machine_res.cpu_slice + app_res.cpu_slice) / self.machine_res.cpu)
+        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice # app 迁入后， 剩余的cpu 容量减少
+        tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         return score - self.get_machine_real_score()   
 
     def release_app(self, inst_id, app_res):

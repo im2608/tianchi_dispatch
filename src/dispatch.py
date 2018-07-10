@@ -30,6 +30,8 @@ def main():
     i = 0
     for each_inst in inst_app_csv:
         inst_id = int(each_inst[0])
+        if (inst_id == 30273):
+            print(inst_id)
         
         # 初始化时指定机器的 inst 已经在 MachineResMgr.init_deploying 中处理过了，这里跳过
         if (len(each_inst[2]) > 0):

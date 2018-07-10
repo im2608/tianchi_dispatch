@@ -16,10 +16,10 @@ class MachineRes(object):
         self.p = float(each_machine[4]) # 剩余 p
         self.m = float(each_machine[5]) # 剩余 m
         self.pm = float(each_machine[6]) # 剩余 pm
-        
+
         self.cpu_useage = 0
-        self.cpu_slice = np.array(np.zeros(SLICE_CNT))  # cpu 使用量
-        self.mem_slice  = np.array(np.zeros(SLICE_CNT)) # mem 使用量
+        self.cpu_slice = np.array(np.zeros(SLICE_CNT) + self.cpu)  # 剩余 cpu
+        self.mem_slice  = np.array(np.zeros(SLICE_CNT) + self.mem) # 剩余 mem 
         self.cpu_percentage = 0 # cpu 使用率 = cpu slice max 使用量 / cpu 容量
         
         self.machine_score = 0
@@ -53,9 +53,9 @@ class MachineRes(object):
         return self.res_sum
        
     def update_machine_res(self, app_res, ratio):
-        self.mem_slice += (-ratio) * app_res.mem_slice
-        self.cpu_slice += (-ratio) * app_res.cpu_slice
-        
+        self.mem_slice += ratio * app_res.mem_slice
+        self.cpu_slice += ratio * app_res.cpu_slice
+
         # slice 由于误差可能不会为0， 这里凡是 < 0.001 的slice 都设置成0
         self.cpu_slice = np.where(np.less(self.cpu_slice, 0.001), 0, self.cpu_slice)
         self.mem_slice = np.where(np.less(self.mem_slice, 0.001), 0, self.mem_slice)
@@ -67,12 +67,12 @@ class MachineRes(object):
         
         self.cpu_percentage = self.cpu_slice.max() / self.cpu
         
-        self.machine_score = score_of_cpu_percent_slice(self.cpu_slice / self.cpu)
+        self.machine_score = score_of_cpu_percent_slice((self.cpu - self.cpu_slice) / self.cpu)
         
     # 机器资源是否能够容纳 inst
     def meet_inst_res_require(self, app_res):
-        return (np.all(self.cpu - self.cpu_slice >= app_res.cpu_slice) and  
-                np.all(self.mem - self.mem_slice >= app_res.mem_slice) and
+        return (np.all(self.cpu_slice >= app_res.cpu_slice) and  
+                np.all(self.mem_slice >= app_res.mem_slice) and
                 self.disk >= app_res.disk and
                 self.p >= app_res.p and
                 self.m >= app_res.m  and

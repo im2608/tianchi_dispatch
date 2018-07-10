@@ -38,5 +38,4 @@ def score_of_cpu_percent_slice(slice):
 def print_and_log(msg):
     print(getCurrentTime(), msg)
     logging.info(msg)
-#     return np.where(np.greater(slice, 0.5), 1 + 10 * (np.exp(slice - 0.5) - 1), 1).sum()
-    
+
