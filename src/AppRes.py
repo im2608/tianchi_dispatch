@@ -21,6 +21,14 @@ class AppRes(object):
             self.m = 0
             self.pm = 0
         
+        self.cpu_var = np.var(self.cpu_slice)
+            
+        m = np.array([score_of_cpu_percent_slice(self.cpu_slice / 32), self.cpu_var])
+        self.score_on_empty_small = np.sqrt(np.sum(m ** 2))
+        
+        m[0] =score_of_cpu_percent_slice(self.cpu_slice / 92)
+        self.score_on_empty_big = np.sqrt(np.sum(m ** 2))
+        
         self.res_var = np.var([self.disk / MAX_DISK, self.p / MAX_P, self.m / MAX_M, self.pm / MAX_PM, 
                                np.var(self.cpu_slice / MAX_CPU), np.var(self.mem_slice / MAX_CPU)])
         return

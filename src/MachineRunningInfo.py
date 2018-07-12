@@ -163,17 +163,15 @@ class MachineRunningInfo(object):
         
         # 满足约束条件，看剩余资源是否满足
         return self.running_machine_res.meet_inst_res_require(tmp_app_res)
-    
-    
+
     # 是否可以将 app_res 分发到当前机器
     def can_dispatch(self, app_res, app_constraint_dict):
-        
         if (not self.meet_constraint(app_res, app_constraint_dict)):
-            return False        
+            return False
 
         # 满足约束条件，看剩余资源是否满足
         return self.running_machine_res.meet_inst_res_require(app_res)
-    
+
     def dispatch_app(self, inst_id, app_res, app_constraint_dict):
         if (self.can_dispatch(app_res, app_constraint_dict)):
             self.update_machine_res(inst_id, app_res, DISPATCH_RATIO)
@@ -186,7 +184,33 @@ class MachineRunningInfo(object):
         tmp = self.running_machine_res.cpu_slice + app_res.cpu_slice # app 迁出后， 剩余的cpu 容量增加
         
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
-        return self.get_machine_real_score() - score  
+        return self.get_machine_real_score() - score
+    
+    # 将 app 迁入后的分数  = L2_regular([迁入后的得分， 迁入后cpu slic 的 标差])
+#     def immigrating_score(self, app_res):
+#         if (self.running_machine_res.disk == self.machine_res.disk):
+#             return app_res.score_on_empty_small if (self.machine_res.machine_id <= 3000) else app_res.score_on_empty_big
+# 
+#         m = np.array([self.immigrating_delta_score(app_res), self.immigrating_cpu_std(app_res)])
+#         
+#         return  np.sqrt(np.sum(m ** 2))
+
+
+    # 将 app 迁出后的分数
+    def migrating_score(self, app_res):
+        tmp = self.running_machine_res.cpu_slice + app_res.cpu_slice # app 迁出后， 剩余的cpu 容量增加
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        
+        return score
+    
+    
+    # 将 app 迁入后的分数
+    def immigrating_score(self, app_res):
+        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice # app 迁入后， 剩余的cpu 容量减少
+        tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        
+        return score
     
     # 将 app 迁入后所增加的分数
     def immigrating_delta_score(self, app_res):
@@ -194,6 +218,16 @@ class MachineRunningInfo(object):
         tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         return score - self.get_machine_real_score()   
+    
+    # app 迁入后cpu slic 的 标差
+    def immigrating_cpu_std(self, app_res):
+        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice # app 迁入后， 剩余的cpu 容量减少
+        return np.std(tmp)
+
+    # app 迁入后 mem slic 的 标差
+    def immigrating_mem_std(self, app_res):
+        tmp = self.running_machine_res.mem_slice - app_res.mem_slice # app 迁入后， 剩余的cpu 容量减少
+        return np.std(tmp)
 
     def release_app(self, inst_id, app_res):
         if (inst_id in self.running_inst_list):
@@ -230,22 +264,23 @@ class MachineRunningInfo(object):
             if (len(candidate_insts) == 0 or len(candidate_insts) <= inst_list_size):
                 break
 
-        # 在所有符合条件的可迁出 app list 中， 找到在当前机器上得分最高的作为迁出列表
+        # 在所有符合条件的可迁出 app list 中， 找到在当前机器上得分最低的作为迁出列表
         if (len(candidate_apps_list_of_machine) > 0):
-            max_score = 0
-            max_idx = 0
+            min_score = 1e9
+            min_idx = 0
             for i, each_candidate_list in enumerate(candidate_apps_list_of_machine):
-                score_of_list = AppRes.get_socre_of_apps(each_candidate_list, inst_app_dict, app_res_dict, self.machine_res.cpu)
-                if (score_of_list < max_score):
-                    score_of_list = score_of_list
-                    max_idx = i
+                tmp_app = AppRes.sum_app_res_by_inst(each_candidate_list, inst_app_dict, app_res_dict)
+                score_of_list = self.migrating_delta_score(tmp_app)
+                if (score_of_list < min_score):
+                    min_score = score_of_list
+                    min_idx = i
 
             end_time = time.time()
             
             print(getCurrentTime(), " done, running inst len %d, ran %d seconds" % \
                   (len(self.running_inst_list), end_time - start_time))
 
-            return candidate_apps_list_of_machine[max_idx], max_score
+            return candidate_apps_list_of_machine[min_idx], min_score
         else:
             return []
         
@@ -261,10 +296,10 @@ class MachineRunningInfo(object):
             immigrating_app_res = app_res_dict[inst_app_dict[immgrate_inst_id]]
             if (np.all(tmp_app_res.cpu_slice + self.running_machine_res.cpu_slice >= immigrating_app_res.cpu_slice) and 
                 np.all(tmp_app_res.mem_slice + self.running_machine_res.mem >= immigrating_app_res.mem_slice) and 
-                tmp_app_res.disk_usg + self.running_machine_res.disk >= immigrating_app_res.disk and 
-                tmp_app_res.p_usg + self.running_machine_res.p >= immigrating_app_res.p and 
-                tmp_app_res.m_usg + self.running_machine_res.m >= immigrating_app_res.m and
-                tmp_app_res.pm_usg + self.running_machine_res.pm >= immigrating_app_res.pm):
+                tmp_app_res.disk + self.running_machine_res.disk >= immigrating_app_res.disk and 
+                tmp_app_res.p + self.running_machine_res.p >= immigrating_app_res.p and 
+                tmp_app_res.m + self.running_machine_res.m >= immigrating_app_res.m and
+                tmp_app_res.pm + self.running_machine_res.pm >= immigrating_app_res.pm):
                 candidate_apps_list.append(cur_inst_list)
             return 
         

@@ -24,6 +24,10 @@ MAX_PM = 9
 SLICE_CNT = 98
 ISOTIMEFORMAT = "%Y-%m-%d %X"
 
+MACHINE_CNT = 6000
+APP_CNT = 9338
+INST_CNT = 68219
+        
 def getCurrentTime():
     return "[%s]" % (time.strftime(ISOTIMEFORMAT, time.localtime()))
 

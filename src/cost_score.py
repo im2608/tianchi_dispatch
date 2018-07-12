@@ -42,23 +42,22 @@ class AdjustDispatch(object):
             self.app_constraint_dict[app_id_a][app_id_b] = int(each_cons[2])
 
         self.cost = 0 
-        
-        self.submit_filename = 'submit_20180709_182641_optimized'
-        
+
+        self.submit_filename = 'submit_20180711_151945'
+
         log_file = r'%s\..\log\cost_%s.log' % (runningPath, self.submit_filename)
-    
+
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
                             datefmt='%a, %d %b %Y %H:%M:%S',
                             filename=log_file,
                             filemode='w')
-        
         return
 
     def sorte_machine(self):
         self.sorted_machine_cost = sorted(self.machine_runing_info_dict.items(), key = lambda d : d[1].get_machine_real_score(), reverse = True)
 
-    # 从得分最低的机器上迁出所有的 inst, 如果增加的分数 < 98, 则可行 
+    # 从得分为 98 的机器上迁出所有的 inst, 如果增加的分数 < 98, 则可行 
     def adj_dispatch_reverse(self):
 
         for machine_idx in range(len(self.sorted_machine_cost) - 1, -1, -1):
@@ -97,7 +96,7 @@ class AdjustDispatch(object):
                     if (heavy_load_machine.can_dispatch_ex(inst_list + [each_inst], self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)):
                         # 将 inst 迁入后增加的分数
                         sum_app_res = AppRes.sum_app_res_by_inst(inst_list + [each_inst], self.inst_app_dict, self.app_res_dict)
-                        increased_score = heavy_load_machine.immigrating_delta_score(sum_app_res)
+                        increased_score = heavy_load_machine.immigrating_score(sum_app_res)
                         if (increased_score < min_delta_score):
                             min_delta_score = increased_score
                             immigrating_machine = machine_id
@@ -160,8 +159,9 @@ class AdjustDispatch(object):
             
         return scores
         
-    def adj_dispatch(self):
+    def adj_dispatch(self, non_migratable_machine):
         machine_idx = 0
+        
         non_migratable_machine = set()
 
         # 得分最高的机器
@@ -322,20 +322,19 @@ class AdjustDispatch(object):
         logging.info('optimizing for H -> L')
         cost = self.sum_scores_of_machine()
         
-#         next_cost = self.adj_dispatch()
-#         while (next_cost < cost):
-#             print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
-#             cost = next_cost
-#             next_cost = self.adj_dispatch()
-        
-        next_cost = self.adj_dispatch_reverse()            
+        non_migratable_machine = set()
+        next_cost = self.adj_dispatch(non_migratable_machine)
         while (next_cost < cost):
-            print_and_log('After adj_dispatch_reverse(), score %f -> %f' % (cost, next_cost))
+            print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
             cost = next_cost
-            next_cost = self.adj_dispatch()        
-#         print(getCurrentTime(), 'optimizing for L -> H')
-#         logging.info('optimizing for L -> H')
-#         self.adj_dispatch_reverse()        
+            next_cost = self.adj_dispatch(non_migratable_machine)
+        
+#         next_cost = self.adj_dispatch_reverse()            
+#         while (next_cost < cost):
+#             print_and_log('After adj_dispatch_reverse(), score %f -> %f' % (cost, next_cost))
+#             cost = next_cost
+#             next_cost = self.adj_dispatch()        
+     
 
         with open(r'%s\..\output\%s_optimized.csv' % (runningPath, self.submit_filename), 'w') as output_file:
             for each_disp in self.migraring_list:

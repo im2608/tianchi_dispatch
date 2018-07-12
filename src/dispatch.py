@@ -6,22 +6,6 @@ Created on Jun 22, 2018
 
 from ResMgr import *
 
-def load_data():
-    inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
-    inst_app_dict = {}
-    for each_inst in inst_app_csv:
-        if (len(each_inst[2]) > 0):
-            inst_id = each_inst[0]
-            inst_app_dict[inst_id] = [each_inst[1], each_inst[2]]
-
-    app_constraint_dict = {}
-    app_cons_csv = csv.reader(open(r'%s\..\input\app_interference.csv' % runningPath, 'r'))
-    for each_cons in app_cons_csv:
-        app_constraint_dict[each_cons[0]] = (each_cons[1], each_cons[2])
-
-    return
-
-
 def main():
     print(getCurrentTime(), 'running...')
     res_mgr = MachineResMgr()
@@ -30,9 +14,6 @@ def main():
     i = 0
     for each_inst in inst_app_csv:
         inst_id = int(each_inst[0])
-        if (inst_id == 30273):
-            print(inst_id)
-        
         # 初始化时指定机器的 inst 已经在 MachineResMgr.init_deploying 中处理过了，这里跳过
         if (len(each_inst[2]) > 0):
             continue

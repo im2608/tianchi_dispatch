@@ -87,9 +87,7 @@ class MachineRes(object):
         m = 0
         pm = 0
         
-        for machine_info_tuple in sorted_machine_res:
-            machine_res =  machine_info_tuple[1]
-
+        for machine_id, machine_res in sorted_machine_res:
             cpu_slice += machine_res.running_machine_res.cpu_slice
             mem_slice += machine_res.running_machine_res.mem_slice
             disk += machine_res.running_machine_res.disk
