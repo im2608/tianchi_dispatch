@@ -43,7 +43,7 @@ class AdjustDispatch(object):
 
         self.cost = 0 
 
-        self.submit_filename = 'submit_20180711_151945'
+        self.submit_filename = 'submit_20180719_214549'
 
         log_file = r'%s\..\log\cost_%s.log' % (runningPath, self.submit_filename)
 
@@ -134,7 +134,7 @@ class AdjustDispatch(object):
                         print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (each_inst, immigrating_machine))
                         return
                     
-                    self.migraring_list.append('inst_%d,machine_%d' % (each_inst, immigrating_machine))
+                    self.migrating_list.append('inst_%d,machine_%d' % (each_inst, immigrating_machine))
             
                     lightest_load_machine.release_app(each_inst, app_res) # 迁出 inst
 
@@ -152,6 +152,97 @@ class AdjustDispatch(object):
         return next_cost
     
 
+    def adj_dispatch_ex(self, max_score):
+        
+        machine_idx = 0
+        
+        next_cost = self.sum_scores_of_machine()
+
+        while (self.sorted_machine_cost[machine_idx][1].get_machine_real_score() > max_score):
+            machine_id = self.sorted_machine_cost[machine_idx][0]
+            if (machine_id == 430):
+                print(machine_id)
+                
+            heavest_load_machine = self.machine_runing_info_dict[machine_id]
+
+            immigrating_machine_dict = {}
+            sum_increased_score = 0 # 将  inst 迁入后增加的分数的总和
+
+            for each_inst in heavest_load_machine.running_inst_list:
+                app_res = self.app_res_dict[self.inst_app_dict[each_inst]]
+                min_delta_score = 1e9 # 将 inst 迁入后增加的分数， 找到增加分数最小的机器
+
+                # 在所有的机器上找到迁入最小的分数
+                for i in range(machine_idx + 1, len(self.sorted_machine_cost)):
+                    machine_id = self.sorted_machine_cost[i][0]
+    
+                    heavy_load_machine = self.machine_runing_info_dict[machine_id]
+
+                    # 多个 inst 可能迁移到同一台机器上, 所以判断是否能够迁入应该用多个 inst 一起来判断
+                    if (machine_id in immigrating_machine_dict):
+                        inst_list = immigrating_machine_dict[machine_id][0] # 已经决定要迁移到该机器上的 inst 
+                    else:
+                        inst_list = []
+
+                    # 已经决定要迁移到该机器上的 inst + 将要迁入的 inst， 看是否满足迁入条件
+                    if (heavy_load_machine.can_dispatch_ex(inst_list + [each_inst], self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)):
+                        # 将 inst 迁入后增加的分数
+                        sum_app_res = AppRes.sum_app_res_by_inst(inst_list + [each_inst], self.inst_app_dict, self.app_res_dict)
+                        increased_score = heavy_load_machine.immigrating_delta_score(sum_app_res)
+                        if (increased_score < min_delta_score):
+                            min_delta_score = increased_score
+                            immigrating_machine = machine_id
+
+                            # 迁入后没有增加分数， 最好的结果， 无需继续查找
+                            if (increased_score == 0):
+                                break
+
+                if (min_delta_score < 1e9):
+                    if (immigrating_machine in immigrating_machine_dict):
+                        immigrating_machine_dict[immigrating_machine][0].append(each_inst)
+                        immigrating_machine_dict[immigrating_machine][1] = min_delta_score
+                    else:
+                        immigrating_machine_dict[immigrating_machine] = [[each_inst], min_delta_score]
+    
+                    sum_increased_score += min_delta_score
+
+                # 增加的分数 > 98, 不可行 , 不用再继续尝试
+                if (sum_increased_score > heavest_load_machine.get_machine_real_score()):
+                    break
+            
+            if (sum_increased_score > heavest_load_machine.get_machine_real_score() or len(immigrating_machine_dict) == 0):
+                print_and_log('migrating %s, running len %d, increased score %f > (real score %f), continue...' % \
+                              (heavest_load_machine.machine_res.machine_id, len(heavest_load_machine.running_inst_list), 
+                               sum_increased_score, heavest_load_machine.get_machine_real_score()))
+                machine_idx += 1
+                continue
+
+            # 迁入
+            for immigrating_machine, (inst_list, score) in immigrating_machine_dict.items():
+                for each_inst in inst_list:
+                    app_res = self.app_res_dict[self.inst_app_dict[each_inst]]
+    
+                    # 迁入
+                    if (not self.machine_runing_info_dict[immigrating_machine].dispatch_app(each_inst, app_res, self.app_constraint_dict)):
+                        print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (each_inst, immigrating_machine))
+                        return
+                    
+                    self.migrating_list.append('inst_%d,machine_%d' % (each_inst, immigrating_machine))
+            
+                    heavest_load_machine.release_app(each_inst, app_res) # 迁出 inst
+
+            self.sorted_machine_cost = sorted(self.machine_runing_info_dict.items(), \
+                                         key = lambda d : d[1].get_machine_real_score(), reverse = True) # 排序
+            
+            # 迁移之后重新计算得分
+            next_cost = self.sum_scores_of_machine()   
+
+            print_and_log('migrating %s, increased score %f, next_cost %f' % \
+                  (heavest_load_machine.machine_res.machine_id, sum_increased_score, next_cost))
+
+        return next_cost
+    
+    
     def sum_scores_of_machine(self):
         scores = 0
         for machine_id, machine_running_res in self.sorted_machine_cost:
@@ -159,7 +250,7 @@ class AdjustDispatch(object):
             
         return scores
         
-    def adj_dispatch(self, non_migratable_machine):
+    def adj_dispatch(self):
         machine_idx = 0
         
         non_migratable_machine = set()
@@ -211,7 +302,7 @@ class AdjustDispatch(object):
                 print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (migrate_inst, immmigrating_machine))
                 return
             
-            self.migraring_list.append('inst_%d,machine_%d' % (migrate_inst, immmigrating_machine))
+            self.migrating_list.append('inst_%d,machine_%d' % (migrate_inst, immmigrating_machine))
     
             heavest_load_machine.release_app(migrate_inst, migrate_app_res) # 迁出 inst
     
@@ -244,7 +335,7 @@ class AdjustDispatch(object):
                 insts_running_machine_dict[inst_id] = machine_id
                 i += 1
 
-        self.migraring_list = []
+        self.migrating_list = []
 
         print(getCurrentTime(), 'loading %s.csv' % self.submit_filename)        
         app_dispatch_csv = csv.reader(open(r'%s\..\output\%s.csv' % (runningPath, self.submit_filename), 'r'))
@@ -264,7 +355,7 @@ class AdjustDispatch(object):
                 exit(-1)
 
             insts_running_machine_dict[inst_id] = machine_id      
-            self.migraring_list.append('inst_%d,machine_%d' % (inst_id, machine_id)) 
+            self.migrating_list.append('inst_%d,machine_%d' % (inst_id, machine_id)) 
 
         self.sorte_machine()
         
@@ -322,12 +413,17 @@ class AdjustDispatch(object):
         logging.info('optimizing for H -> L')
         cost = self.sum_scores_of_machine()
         
-        non_migratable_machine = set()
-        next_cost = self.adj_dispatch(non_migratable_machine)
+        next_cost = self.adj_dispatch_ex(196)
+        while (next_cost < cost):
+            print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
+            cost = next_cost
+            next_cost = self.adj_dispatch_ex(100)
+            
+        next_cost = self.adj_dispatch()
         while (next_cost < cost):
             print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
             cost = next_cost
-            next_cost = self.adj_dispatch(non_migratable_machine)
+            next_cost = self.adj_dispatch()            
         
 #         next_cost = self.adj_dispatch_reverse()            
 #         while (next_cost < cost):
@@ -337,7 +433,7 @@ class AdjustDispatch(object):
      
 
         with open(r'%s\..\output\%s_optimized.csv' % (runningPath, self.submit_filename), 'w') as output_file:
-            for each_disp in self.migraring_list:
+            for each_disp in self.migrating_list:
                 output_file.write('%s\n' % (each_disp))
 
         cost = 0

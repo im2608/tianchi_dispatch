@@ -14,16 +14,16 @@ def main():
     i = 0
     for each_inst in inst_app_csv:
         inst_id = int(each_inst[0])
+        i += 1
+        if (i % 100 == 0):
+            print(getCurrentTime(), ' %d instances handled\r' % (i), end='')
+
         # 初始化时指定机器的 inst 已经在 MachineResMgr.init_deploying 中处理过了，这里跳过
         if (len(each_inst[2]) > 0):
             continue
 
         if (not res_mgr.dispatch_inst(inst_id, None)):
             break
-
-        if (i % 100 == 0):
-            print(getCurrentTime(), ' %d instances handled\r' % (i), end='')
-        i += 1
 
     res_mgr.output_submition()
 

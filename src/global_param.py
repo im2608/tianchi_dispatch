@@ -43,3 +43,11 @@ def print_and_log(msg):
     print(getCurrentTime(), msg)
     logging.info(msg)
 
+
+g_pheromone_dict = dict()
+
+g_cur_def_pheromone = 700
+
+ALPHA = 1.0 #启发因子，信息素的重要程度
+BETA = 2.0  #期望因子，城市间距离的重要程度
+ROU = 0.5   #信息素残留参数

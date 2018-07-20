@@ -67,7 +67,7 @@ class MachineRunningInfo(object):
 #         return self.running_machine_res.cpu_percentage
 
     def get_machine_score(self):
-        return max(self.running_machine_res.machine_score - 100, 0) # 得分低于100 的归为一类
+        return max(self.running_machine_res.machine_score - 196, 0) # 得分低于 196 的归为一类
 
     def get_machine_real_score(self):
         return self.running_machine_res.machine_score
