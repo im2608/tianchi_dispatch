@@ -20,6 +20,8 @@ class AppRes(object):
             self.p = 0
             self.m = 0
             self.pm = 0
+            
+        self.res_vector = np.hstack((self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm))
         
         self.cpu_var = np.var(self.cpu_slice)
             

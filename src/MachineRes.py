@@ -22,6 +22,8 @@ class MachineRes(object):
         self.mem_slice  = np.array(np.zeros(SLICE_CNT) + self.mem) # 剩余 mem 
         self.cpu_percentage = 0 # cpu 使用率 = cpu slice max 使用量 / cpu 容量
         
+        self.res_vector = np.hstack((self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm))
+        
         self.machine_score = 0
     
         # 剩余可用资源
@@ -64,6 +66,8 @@ class MachineRes(object):
         self.p += ratio * app_res.p
         self.m += ratio * app_res.m
         self.pm += ratio * app_res.pm
+        
+        self.res_vector = np.hstack((self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm))
         
         self.cpu_percentage = self.cpu_slice.max() / self.cpu
         

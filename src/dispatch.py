@@ -22,7 +22,7 @@ def main():
         if (len(each_inst[2]) > 0):
             continue
 
-        if (not res_mgr.dispatch_inst(inst_id, None)):
+        if (not res_mgr.dispatch_inst(inst_id)):
             break
 
     res_mgr.output_submition()

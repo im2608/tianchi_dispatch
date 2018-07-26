@@ -35,19 +35,28 @@ def split_slice(slice):
     return np.array(list(map(float, slice.split('|'))))
 
 def score_of_cpu_percent_slice(slice):
-    return np.where(np.greater(slice, 0), \
-                    1 + 10 * (np.exp(np.maximum(0, slice - 0.5)) - 1), \
+    tmp = np.where(np.less(slice, 0.001), 0, slice)
+    return np.where(np.greater(tmp, 0), \
+                    1 + 10 * (np.exp(np.maximum(0, tmp - 0.5)) - 1), \
                     0).sum()
 
 def print_and_log(msg):
     print(getCurrentTime(), msg)
     logging.info(msg)
 
+# return True for small machine, False for big machine otherwise
+def does_prefer_small_machine(app_res):
+    cpu_mean = np.mean(app_res.cpu_slice)
+    mem_mean = np.mean(app_res.mem_slice)
+    if (cpu_mean < 16 and mem_mean < 64 and app_res.disk < 500):
+        return True
+    
+    return False
 
-g_pheromone_dict = dict()
 
-g_cur_def_pheromone = 700
+
+
 
 ALPHA = 1.0 #启发因子，信息素的重要程度
-BETA = 2.0  #期望因子，城市间距离的重要程度
+BETA = 2.0  #期望因子
 ROU = 0.5   #信息素残留参数

@@ -16,6 +16,10 @@ class MachineRunningInfo(object):
         self.running_app_dict = {}
         return
     
+    # 得到启发式信息: （剩余资源vec - app 资源 vec） 的均值
+    def get_heuristic(self, app_res):
+        return np.mean(self.running_machine_res.cpu_slice - app_res.cpu_slice)
+    
     # ratio 为 1 或 -1，  dispatch app 时 为 -1， 释放app时 为 1
     def update_machine_res(self, inst_id, app_res, ratio):
         self.running_machine_res.update_machine_res(app_res, ratio)
@@ -52,6 +56,9 @@ class MachineRunningInfo(object):
                         if (immmigrate_app_b_running_inst > app_constraint_dict[app_res_a.app_id][app_res_b.app_id]):
                             return inst_b
         return None
+    
+    def get_machine_id(self):
+        return self.machine_res.machine_id
 
     def print_remaining_res(self, inst_app_dict, app_res_dict):
         for each_inst in self.running_inst_list:
