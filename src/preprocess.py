@@ -10,12 +10,12 @@ def app_classification():
 
     print(getCurrentTime(), 'loading app_resources.csv...')
     app_res_dict = {}
-    app_res_csv = csv.reader(open(r'%s\..\input\app_resources.csv' % runningPath, 'r'))
+    app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
     for each_app in app_res_csv:
         app_id = int(each_app[0])
         cpu_slice = np.round(np.array(list(map(float, each_app[1].split('|')))).mean(), 4)
         mem_slice = np.round(np.array(list(map(float, each_app[2].split('|')))).mean(), 4)
-        disk = int(each_app[3])
+        disk = int(float(each_app[3]))
         p = int(each_app[4])
         m = int(each_app[5])
         pm = int(each_app[6])
@@ -29,7 +29,7 @@ def app_classification():
         
     sorted_app_res_tup = np.sort(list(app_res_dict.keys()))
     
-    with open(r'%s\..\log\app_classification.txt' % runningPath, 'w') as outputfile:
+    with open(r'%s\..\log\app_classification_%s.txt' % (runningPath, data_set), 'w') as outputfile:
         for app_res_tup in sorted_app_res_tup:
             outputfile.write('%s,%d\n' % (app_res_tup, app_res_dict[app_res_tup]))
             

@@ -23,7 +23,7 @@ from nltk.ccg.lexicon import APP_RE
 class MachineResMgr(object):
     def __init__(self):
         
-        log_file = r'%s\..\log\dispatch_score.txt' % runningPath
+        log_file = r'%s\..\log\dispatch_score_%s.txt' % (runningPath, data_set)
         
         self.print_all_scores = False
 
@@ -36,8 +36,8 @@ class MachineResMgr(object):
         #  记录 machine 的运行信息， 包括 cpu 使用量,  cpu 使用率 = cpu 使用量 / cpu 容量， d, p, m, pm, app list
         print(getCurrentTime(), 'loading machine_resources.csv...')
         self.machine_runing_info_dict = {} 
-        machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources_reverse.csv' % runningPath, 'r'))
-#         machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources.csv' % runningPath, 'r'))
+#         machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources_reverse.csv' % (runningPath, data_set), 'r'))
+        machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources.csv' % (runningPath, data_set), 'r'))
         
         self.used_machine_dict = {}
 
@@ -47,14 +47,14 @@ class MachineResMgr(object):
 
         print(getCurrentTime(), 'loading app_resources.csv...')
         self.app_res_dict = [0 for x in range(APP_CNT + 1)]
-        app_res_csv = csv.reader(open(r'%s\..\input\app_resources.csv' % runningPath, 'r'))
+        app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
         for each_app in app_res_csv:
             app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
 
         print(getCurrentTime(), 'loading app_interference.csv...')
         self.app_constraint_dict = {}
-        app_cons_csv = csv.reader(open(r'%s\..\input\app_interference.csv' % runningPath, 'r'))
+        app_cons_csv = csv.reader(open(r'%s\..\input\%s\app_interference.csv' % (runningPath, data_set), 'r'))
         for each_cons in app_cons_csv:
             app_id_a = int(each_cons[0])
             app_id_b = int(each_cons[1])
@@ -66,27 +66,27 @@ class MachineResMgr(object):
         self.migrating_list = []
     
         print(getCurrentTime(), 'loading instance_deploy.csv...')
-        inited_filename = r'%s\..\input\initialized_deploy.csv' % (runningPath)
+        inited_filename = r'%s\..\input\%s\initialized_deploy.csv' % (runningPath, data_set)
         b_created_init_filename = os.path.exists(inited_filename)
         self.inst_app_dict = {}
-        inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
+        inst_app_csv = csv.reader(open(r'%s\..\input\%s\instance_deploy.csv' % (runningPath, data_set), 'r'))
         for each_inst in inst_app_csv:
             inst_id = int(each_inst[0])
             app_id = int(each_inst[1])
             self.inst_app_dict[inst_id] = app_id
-            if (not b_created_init_filename and len(each_inst[2]) > 0):
+            if (len(each_inst[2]) > 0):
                 machine_id = int(each_inst[2])
                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
 
-        if (b_created_init_filename):
-            print(getCurrentTime(), 'loading initialized_deploy.csv...')
-            inst_disp_csv = csv.reader(open(r'%s\..\input\initialized_deploy.csv' % runningPath, 'r'))
-            for each_inst in inst_disp_csv:
-                inst_id = int(each_inst[0].split('_')[1])
-                machine_id = int(each_inst[1].split('_')[1])
-                self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[self.inst_app_dict[app_id]], DISPATCH_RATIO)
-                self.migrating_list.append(each_app)
-        self.sort_machine()            
+#         if (b_created_init_filename):
+#             print(getCurrentTime(), 'loading initialized_deploy.csv...')
+#             inst_disp_csv = csv.reader(open(r'%s\..\input\initialized_deploy.csv' % runningPath, 'r'))
+#             for each_inst in inst_disp_csv:
+#                 inst_id = int(each_inst[0].split('_')[1])
+#                 machine_id = int(each_inst[1].split('_')[1])
+#                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[self.inst_app_dict[inst_id]], DISPATCH_RATIO)
+#                 self.migrating_list.append(each_app)
+        self.sort_machine()
         self.init_deploying()
         return
     
@@ -227,7 +227,7 @@ class MachineResMgr(object):
                 print(getCurrentTime(), '%d violating machine initialized\r' % index, end='')
             index += 1
 
-            if (len(violate_machine_res.running_inst_list) == 1):
+            if (len(violate_machine_res.running_inst_list) <= 1):
                 continue
 
             # 查找机器上的 running inst list 是否有违反约束的 inst
@@ -265,9 +265,9 @@ class MachineResMgr(object):
 
             one_inst_machine_running_res.release_app(inst_id, app_res)
 
-        cost = self.sum_scores_of_machine()
-        next_cost = self.adj_dispatch_ex()
-        print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
+#         cost = self.sum_scores_of_machine()
+#         next_cost = self.adj_dispatch_ex()
+#         print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
 #             
 #         next_cost = self.adj_dispatch()
 #         while (next_cost < cost):
@@ -275,7 +275,7 @@ class MachineResMgr(object):
 #             cost = next_cost
 #             next_cost = self.adj_dispatch()    
 
-        inited_filename = r'%s\..\input\initialized_deploy.csv' % (runningPath)
+        inited_filename = r'%s\..\input\%s\initialized_deploy.csv' % (runningPath, data_set)
         with open(inited_filename, 'w') as inited_deploy_file:
             for each_migrating in self.migrating_list:
                 inited_deploy_file.write('%s\n' % (each_migrating))
@@ -453,7 +453,7 @@ class MachineResMgr(object):
         total = len(current_solution) * len(one_step_solution)
         print_and_log('merge_migration_solution, possible steps %d (%d/%d)' % (total, current_len, one_step_len))
         migration_solution = []
-        scores_dict = set()
+        solution_scores_list = []
         idx = 0
         for each_current in current_solution:
             if (idx % 1000 == 0):
@@ -477,10 +477,6 @@ class MachineResMgr(object):
                     if (immigrating_machine_id not in each_current_tmp[0]):
                         each_current_tmp[0][immigrating_machine_id] = one_step[0][immigrating_machine_id]
                         each_current_tmp[1] = round(each_current_tmp[1] + one_step[1], 2)
-                        
-                        if (each_current_tmp[1] < machine_real_score and each_current_tmp[1] not in scores_dict):
-                            migration_solution.append(each_current_tmp)
-                            scores_dict.add(each_current_tmp[1])                        
                     else:  # one step 中要迁入的 machine 已经出现在前 n-1 步中， 需要判断是否能够继续迁入
                         inst_list = each_current_tmp[0][immigrating_machine_id] + one_step[0][immigrating_machine_id]
                         immigrating_machine_res = self.machine_runing_info_dict[immigrating_machine_id] 
@@ -499,11 +495,35 @@ class MachineResMgr(object):
                         each_current_tmp[1] = round(each_current_tmp[1] + delta_score - cur_delta_score, 2)
                         each_current_tmp[0][immigrating_machine_id].extend(one_step[0][immigrating_machine_id])
 
-                        if (each_current_tmp[1] < machine_real_score and each_current_tmp[1] not in scores_dict):
+                        if (each_current_tmp[1] >= machine_real_score):
+                            continue
+                        
+                    if (len(solution_scores_list) == 0):
+                        migration_solution.append(each_current_tmp)
+                        solution_scores_list.append(each_current_tmp[1])
+                    elif (len(solution_scores_list) == 1):
+                        if (abs(each_current_tmp[1] - solution_scores_list[0]) >= MAX_SCORE_DIFF):
                             migration_solution.append(each_current_tmp)
-                            scores_dict.add(each_current_tmp[1])
+                            solution_scores_list.append(each_current_tmp[1])
+                    else:
+                        if ((solution_scores_list[0] < each_current_tmp[1] and
+                             solution_scores_list[0] - each_current_tmp[1] >= MAX_SCORE_DIFF) or 
+                            (each_current_tmp[1] > solution_scores_list[-1] and
+                             each_current_tmp[1] - solution_scores_list[-1] >= MAX_SCORE_DIFF)):
+                            migration_solution.append(each_current_tmp)
+                            solution_scores_list.append(each_current_tmp[1])
+                        for i in range(len(solution_scores_list) - 1):
+                            if (each_current_tmp[1] > solution_scores_list[i] and 
+                                each_current_tmp[1] < solution_scores_list[i + 1] and
+                                each_current_tmp[1] - solution_scores_list[i] >= MAX_SCORE_DIFF and                                  
+                                each_current_tmp[1] - solution_scores_list[i + 1] <= -MAX_SCORE_DIFF):                            
+                                migration_solution.append(each_current_tmp)
+                                solution_scores_list.append(each_current_tmp[1])
+                                break
 
-        return migration_solution   
+                    solution_scores_list = sorted(solution_scores_list)
+
+        return migration_solution
      
     def migrate_running_inst_list(self, migrating_machine_res):
         inst_id = migrating_machine_res.running_inst_list[0]
@@ -523,7 +543,9 @@ class MachineResMgr(object):
                                                                          migrating_machine_res.get_machine_real_score())
             print(getCurrentTime(), 'machine %d, %d / %d step solution is %d' % 
                   (machine_id,inst_idx + 1, len(migrating_machine_res.running_inst_list), len(dp_immigrating_solution_list)))
-
+            if (len(dp_immigrating_solution_list) == 0):
+                break
+            
         # 在所有的迁移方案中找到迁入分数最小的
         min_solution_score = 1e9            
         for idx, each_solution in enumerate(dp_immigrating_solution_list):
@@ -645,7 +667,7 @@ class MachineResMgr(object):
 
     def output_submition(self):
         filename = 'submit_%s.csv' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_file = open(r'%s\..\output\%s' % (runningPath, filename), 'w')
+        output_file = open(r'%s\..\output\%s\%s' % (runningPath, data_set, filename), 'w')
         print(getCurrentTime(), 'writing output file %s' % filename)
 
         for each_migrating in self.migrating_list:

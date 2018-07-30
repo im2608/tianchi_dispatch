@@ -18,7 +18,7 @@ class MachineRunningInfo(object):
     
     # 得到启发式信息: （剩余资源vec - app 资源 vec） 的均值
     def get_heuristic(self, app_res):
-        return np.mean(self.running_machine_res.cpu_slice - app_res.cpu_slice)
+        return np.mean(self.running_machine_res.get_cpu_slice() - app_res.get_cpu_slice())
     
     # ratio 为 1 或 -1，  dispatch app 时 为 -1， 释放app时 为 1
     def update_machine_res(self, inst_id, app_res, ratio):
@@ -78,13 +78,6 @@ class MachineRunningInfo(object):
 
     def get_machine_real_score(self):
         return self.running_machine_res.machine_score
-    
-    def get_cpu_useage(self):
-        return self.running_machine_res.cpu_useage
-    
-    # 得到剩余可用资源
-    def get_res_sum(self):
-        return self.running_machine_res.get_res_sum()
     
     # 查看机器总的资源是否能容纳 app
     def meet_inst_res_require(self, app_res):
@@ -173,11 +166,12 @@ class MachineRunningInfo(object):
 
     # 是否可以将 app_res 分发到当前机器
     def can_dispatch(self, app_res, app_constraint_dict):
-        if (not self.meet_constraint(app_res, app_constraint_dict)):
+        # 剩余资源是否满足
+        if (not self.running_machine_res.meet_inst_res_require(app_res)):
             return False
 
-        # 满足约束条件，看剩余资源是否满足
-        return self.running_machine_res.meet_inst_res_require(app_res)
+        # 是否满足约束条件
+        return self.meet_constraint(app_res, app_constraint_dict) 
 
     def dispatch_app(self, inst_id, app_res, app_constraint_dict):
         if (self.can_dispatch(app_res, app_constraint_dict)):
@@ -188,24 +182,15 @@ class MachineRunningInfo(object):
     
     # 将 app 迁出后所减少的分数
     def migrating_delta_score(self, app_res):
-        tmp = self.running_machine_res.cpu_slice + app_res.cpu_slice # app 迁出后， 剩余的cpu 容量增加
+        tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
         
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         return self.get_machine_real_score() - score
     
-    # 将 app 迁入后的分数  = L2_regular([迁入后的得分， 迁入后cpu slic 的 标差])
-#     def immigrating_score(self, app_res):
-#         if (self.running_machine_res.disk == self.machine_res.disk):
-#             return app_res.score_on_empty_small if (self.machine_res.machine_id <= 3000) else app_res.score_on_empty_big
-# 
-#         m = np.array([self.immigrating_delta_score(app_res), self.immigrating_cpu_std(app_res)])
-#         
-#         return  np.sqrt(np.sum(m ** 2))
-
 
     # 将 app 迁出后的分数
     def migrating_score(self, app_res):
-        tmp = self.running_machine_res.cpu_slice + app_res.cpu_slice # app 迁出后， 剩余的cpu 容量增加
+        tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         
         return score
@@ -213,7 +198,7 @@ class MachineRunningInfo(object):
     
     # 将 app 迁入后的分数
     def immigrating_score(self, app_res):
-        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice # app 迁入后， 剩余的cpu 容量减少
+        tmp = self.running_machine_res.get_cpu_slice() - app_res.get_cpu_slice() # app 迁入后， 剩余的cpu 容量减少
         tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         
@@ -221,21 +206,11 @@ class MachineRunningInfo(object):
     
     # 将 app 迁入后所增加的分数
     def immigrating_delta_score(self, app_res):
-        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice # app 迁入后， 剩余的cpu 容量减少
+        tmp = self.running_machine_res.get_cpu_slice() - app_res.get_cpu_slice() # app 迁入后， 剩余的cpu 容量减少
         tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
         return score - self.get_machine_real_score()   
     
-    # app 迁入后cpu slic 的 标差
-    def immigrating_cpu_std(self, app_res):
-        tmp = self.running_machine_res.cpu_slice - app_res.cpu_slice # app 迁入后， 剩余的cpu 容量减少
-        return np.std(tmp)
-
-    # app 迁入后 mem slic 的 标差
-    def immigrating_mem_std(self, app_res):
-        tmp = self.running_machine_res.mem_slice - app_res.mem_slice # app 迁入后， 剩余的cpu 容量减少
-        return np.std(tmp)
-
     def release_app(self, inst_id, app_res):
         if (inst_id in self.running_inst_list):
             self.update_machine_res(inst_id, app_res, RELEASE_RATIO)
@@ -301,7 +276,7 @@ class MachineRunningInfo(object):
 
             # 候选的迁出 app list 资源加上剩余的资源 满足迁入的  app cpu， 保存起来作为迁出的 app list 候选
             immigrating_app_res = app_res_dict[inst_app_dict[immgrate_inst_id]]
-            if (np.all(tmp_app_res.cpu_slice + self.running_machine_res.cpu_slice >= immigrating_app_res.cpu_slice) and 
+            if (np.all(tmp_app_res.get_cpu_slice() + self.running_machine_res.get_cpu_slice() >= immigrating_app_res.get_cpu_slice()) and 
                 np.all(tmp_app_res.mem_slice + self.running_machine_res.mem >= immigrating_app_res.mem_slice) and 
                 tmp_app_res.disk + self.running_machine_res.disk >= immigrating_app_res.disk and 
                 tmp_app_res.p + self.running_machine_res.p >= immigrating_app_res.p and 

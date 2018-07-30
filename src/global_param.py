@@ -8,6 +8,7 @@ import sys
 import time
 import numpy as np
 import logging
+import copy
 
 runningPath = sys.path[0]
 sys.path.append("%s\\features\\" % runningPath)
@@ -46,17 +47,25 @@ def print_and_log(msg):
 
 # return True for small machine, False for big machine otherwise
 def does_prefer_small_machine(app_res):
-    cpu_mean = np.mean(app_res.cpu_slice)
-    mem_mean = np.mean(app_res.mem_slice)
-    if (cpu_mean < 16 and mem_mean < 64 and app_res.disk < 500):
-        return True
+    cpu_mean = np.mean(app_res.get_cpu_slice())
+    mem_mean = np.mean(app_res.get_mem_slice())
+    disk = app_res.get_disk()
     
-    return False
+    if (data_set == 'a'):
+        if (cpu_mean < 16 and mem_mean < 64 and disk < 500):
+            return True
 
+        return False
+    else:
+        if (cpu_mean < 16):
+            return True
 
+        return False
 
-
+data_set = 'a'
 
 ALPHA = 1.0 #启发因子，信息素的重要程度
 BETA = 2.0  #期望因子
 ROU = 0.5   #信息素残留参数
+
+MAX_SCORE_DIFF = 0.5

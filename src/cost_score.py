@@ -19,21 +19,21 @@ class AdjustDispatch(object):
         
         self.machine_runing_info_dict = {} 
         print(getCurrentTime(), 'loading machine_resources.csv')
-        machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources.csv' % runningPath, 'r'))
+        machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources.csv' % (runningPath, data_set), 'r'))
         for each_machine in machine_res_csv:
             machine_id = int(each_machine[0])
             self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
         
         print(getCurrentTime(), 'loading app_resources.csv')
         self.app_res_dict = {}
-        app_res_csv = csv.reader(open(r'%s\..\input\app_resources.csv' % runningPath, 'r'))
+        app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
         for each_app in app_res_csv:
             app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
 
         print(getCurrentTime(), 'loading app_interference.csv')
         self.app_constraint_dict = {}
-        app_cons_csv = csv.reader(open(r'%s\..\input\app_interference.csv' % runningPath, 'r'))
+        app_cons_csv = csv.reader(open(r'%s\..\input\%s\app_interference.csv' % (runningPath, data_set), 'r'))
         for each_cons in app_cons_csv:
             app_id_a = int(each_cons[0])
             app_id_b = int(each_cons[1])
@@ -44,9 +44,9 @@ class AdjustDispatch(object):
 
         self.cost = 0 
 
-        self.submit_filename = 'submit_20180725_145356'
+        self.submit_filename = 'submit_20180727_175925'
 
-        log_file = r'%s\..\log\cost_%s.log' % (runningPath, self.submit_filename)
+        log_file = r'%s\..\log\cost_%s_%s.log' % (runningPath, data_set, self.submit_filename)
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
@@ -140,7 +140,7 @@ class AdjustDispatch(object):
 
             self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), \
                                          key = lambda d : d[1].get_machine_real_score(), reverse = True) # 排序
-            
+
             # 迁移之后重新计算得分
             next_cost = 0
             for machine_id, machine_running_res in self.sorted_machine_res:
@@ -279,7 +279,7 @@ class AdjustDispatch(object):
         total = len(current_solution) * len(one_step_solution)
         print_and_log('merge_migration_solution, possible steps %d (%d/%d)' % (total, current_len, one_step_len))
         migration_solution = []
-        scores_dict = set()
+        solution_scores_list = []
         idx = 0
         for each_current in current_solution:
             if (idx % 1000 == 0):
@@ -303,10 +303,6 @@ class AdjustDispatch(object):
                     if (immigrating_machine_id not in each_current_tmp[0]):
                         each_current_tmp[0][immigrating_machine_id] = one_step[0][immigrating_machine_id]
                         each_current_tmp[1] = round(each_current_tmp[1] + one_step[1], 2)
-                        
-                        if (each_current_tmp[1] < machine_real_score and each_current_tmp[1] not in scores_dict):
-                            migration_solution.append(each_current_tmp)
-                            scores_dict.add(each_current_tmp[1])                        
                     else:  # one step 中要迁入的 machine 已经出现在前 n-1 步中， 需要判断是否能够继续迁入
                         inst_list = each_current_tmp[0][immigrating_machine_id] + one_step[0][immigrating_machine_id]
                         immigrating_machine_res = self.machine_runing_info_dict[immigrating_machine_id] 
@@ -325,10 +321,34 @@ class AdjustDispatch(object):
                         each_current_tmp[1] = round(each_current_tmp[1] + delta_score - cur_delta_score, 2)
                         each_current_tmp[0][immigrating_machine_id].extend(one_step[0][immigrating_machine_id])
 
-                        if (each_current_tmp[1] < machine_real_score and each_current_tmp[1] not in scores_dict):
+                        if (each_current_tmp[1] >= machine_real_score):
+                            continue
+                        
+                    if (len(solution_scores_list) == 0):
+                        migration_solution.append(each_current_tmp)
+                        solution_scores_list.append(each_current_tmp[1])
+                    elif (len(solution_scores_list) == 1):
+                        if (abs(each_current_tmp[1] - solution_scores_list[0]) >= MAX_SCORE_DIFF):
                             migration_solution.append(each_current_tmp)
-                            scores_dict.add(each_current_tmp[1])
-                                
+                            solution_scores_list.append(each_current_tmp[1])
+                    else:
+                        if ((solution_scores_list[0] < each_current_tmp[1] and
+                             solution_scores_list[0] - each_current_tmp[1] >= MAX_SCORE_DIFF) or 
+                            (each_current_tmp[1] > solution_scores_list[-1] and
+                             each_current_tmp[1] - solution_scores_list[-1] >= MAX_SCORE_DIFF)):
+                            migration_solution.append(each_current_tmp)
+                            solution_scores_list.append(each_current_tmp[1])
+                        for i in range(len(solution_scores_list) - 1):
+                            if (each_current_tmp[1] > solution_scores_list[i] and 
+                                each_current_tmp[1] < solution_scores_list[i + 1] and
+                                each_current_tmp[1] - solution_scores_list[i] >= MAX_SCORE_DIFF and                                  
+                                each_current_tmp[1] - solution_scores_list[i + 1] <= -MAX_SCORE_DIFF):                            
+                                migration_solution.append(each_current_tmp)
+                                solution_scores_list.append(each_current_tmp[1])
+                                break
+
+                    solution_scores_list = sorted(solution_scores_list)
+
         return migration_solution
 
     def adj_dispatch_ex(self):
@@ -348,9 +368,8 @@ class AdjustDispatch(object):
             if (len(heavest_load_machine.running_inst_list) == 0):
                 machine_start_idx += 1
                 continue
-            
-            inst_id = heavest_load_machine.running_inst_list[0]
 
+            inst_id = heavest_load_machine.running_inst_list[0]
             app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
 
             # 生成迁移方案的第一步， 以及迁入后增加的分数
@@ -372,9 +391,8 @@ class AdjustDispatch(object):
                                                                              one_step_solution,
                                                                              heavest_load_machine.get_machine_real_score())
                 print(getCurrentTime(), 'machine %d, %d step solution is %d' % (machine_id, inst_idx + 1, len(dp_immigrating_solution_list)))
-                if (len(heavest_load_machine.running_inst_list) == 0):
-                    machine_start_idx += 1
-                    continue
+                if (len(dp_immigrating_solution_list) == 0):
+                    break
 
             # 在所有的迁移方案中找到迁入分数最小的
             min_solution_score = 1e9
@@ -498,7 +516,7 @@ class AdjustDispatch(object):
         print(getCurrentTime(), 'loading instance_deploy.csv...')
 
         self.inst_app_dict = {}
-        inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
+        inst_app_csv = csv.reader(open(r'%s\..\input\%s\instance_deploy.csv' % (runningPath, data_set), 'r'))
         i = 0
         for each_inst in inst_app_csv:
             inst_id = int(each_inst[0])
@@ -513,7 +531,7 @@ class AdjustDispatch(object):
         self.migrating_list = []
 
         print(getCurrentTime(), 'loading %s.csv' % self.submit_filename)        
-        app_dispatch_csv = csv.reader(open(r'%s\..\output\%s.csv' % (runningPath, self.submit_filename), 'r'))
+        app_dispatch_csv = csv.reader(open(r'%s\..\output\%s\%s.csv' % (runningPath, data_set, self.submit_filename), 'r'))
         for each_dispatch in app_dispatch_csv:
             inst_id = int(each_dispatch[0].split('_')[1])
             machine_id = int(each_dispatch[1].split('_')[1])
@@ -584,18 +602,18 @@ class AdjustDispatch(object):
             return cost;
 
         print_and_log('optimizing for H -> L')        
-        next_cost = self.adj_dispatch_ex()
-        print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
-        while (next_cost < cost):
-            cost = next_cost
-            next_cost = self.adj_dispatch_ex()
-            print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
-            
-#         next_cost = self.adj_dispatch()
+#         next_cost = self.adj_dispatch_ex()
+#         print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
 #         while (next_cost < cost):
-#             print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
 #             cost = next_cost
-#             next_cost = self.adj_dispatch()            
+#             next_cost = self.adj_dispatch_ex()
+#             print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
+            
+        next_cost = self.adj_dispatch()
+        while (next_cost < cost):
+            print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
+            cost = next_cost
+            next_cost = self.adj_dispatch()            
         
 #         next_cost = self.adj_dispatch_reverse()            
 #         while (next_cost < cost):
@@ -604,7 +622,7 @@ class AdjustDispatch(object):
 #             next_cost = self.adj_dispatch()        
      
 
-        with open(r'%s\..\output\%s_optimized.csv' % (runningPath, self.submit_filename), 'w') as output_file:
+        with open(r'%s\..\output\%s\%s_optimized.csv' % (runningPath, data_set, self.submit_filename), 'w') as output_file:
             for each_disp in self.migrating_list:
                 output_file.write('%s\n' % (each_disp))
 

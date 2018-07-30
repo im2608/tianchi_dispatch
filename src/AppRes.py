@@ -6,56 +6,41 @@ class AppRes(object):
     def __init__(self, each_app):
         if (each_app is not None):
             self.app_id = int(each_app[0])
-            self.cpu_slice = np.array(list(map(float, each_app[1].split('|'))))
-            self.mem_slice = np.array(list(map(float, each_app[2].split('|'))))
-            self.disk = int(each_app[3])
-            self.p = int(each_app[4])
-            self.m = int(each_app[5])
-            self.pm = int(each_app[6])
+            cpu_slice = np.array(list(map(float, each_app[1].split('|'))))
+            mem_slice = np.array(list(map(float, each_app[2].split('|'))))
+            disk = int(float(each_app[3]))
+            p = int(each_app[4])
+            m = int(each_app[5])
+            pm = int(each_app[6])
         else:
             self.app_id = 0
-            self.cpu_slice = np.array(np.zeros(SLICE_CNT))
-            self.mem_slice = np.array(np.zeros(SLICE_CNT))
-            self.disk = 0
-            self.p = 0
-            self.m = 0
-            self.pm = 0
-            
-        self.res_vector = np.hstack((self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm))
-        
-        self.cpu_var = np.var(self.cpu_slice)
-            
-        m = np.array([score_of_cpu_percent_slice(self.cpu_slice / 32), self.cpu_var])
-        self.score_on_empty_small = np.sqrt(np.sum(m ** 2))
-        
-        m[0] =score_of_cpu_percent_slice(self.cpu_slice / 92)
-        self.score_on_empty_big = np.sqrt(np.sum(m ** 2))
-        
-        self.res_var = np.var([self.disk / MAX_DISK, self.p / MAX_P, self.m / MAX_M, self.pm / MAX_PM, 
-                               np.var(self.cpu_slice / MAX_CPU), np.var(self.mem_slice / MAX_CPU)])
+            cpu_slice = np.array(np.zeros(SLICE_CNT))
+            mem_slice = np.array(np.zeros(SLICE_CNT))
+            disk = 0
+            p = 0
+            m = 0
+            pm = 0
+
+        self.res_vector = np.hstack((cpu_slice, mem_slice, disk, p, m, pm))
+
         return
     
-
-    def to_string(self):
-        return '%s, d %d, p %d, m %d, pm %d' % \
-            (self.app_id, self.disk, self.p, self.m, self.pm)
-            
-    def to_full_string(self):
-        return '%s, c %s, m %s, d %d, p %d, m %d, pm %d' % \
-            (self.app_id, self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm)
+    def get_cpu_slice(self):
+        return self.res_vector[:98]    
+    
+    def get_mem_slice(self):
+        return self.res_vector[98:196]
+    
+    def get_disk(self):
+        return self.res_vector[196]
     
     @staticmethod
     def sum_app_res_by_inst(inst_list, inst_app_dict, app_res_dict):
         tmp_app_res = AppRes(None)
-        
+
         for each_inst in inst_list:
             app_res = app_res_dict[inst_app_dict[each_inst]]
-            tmp_app_res.cpu_slice += app_res.cpu_slice
-            tmp_app_res.mem_slice += app_res.mem_slice
-            tmp_app_res.disk += app_res.disk
-            tmp_app_res.p += app_res.p
-            tmp_app_res.m += app_res.m
-            tmp_app_res.pm += app_res.pm
+            tmp_app_res.res_vector += app_res.res_vector
          
         return tmp_app_res
     
@@ -64,30 +49,8 @@ class AppRes(object):
         tmp_app_res = AppRes(None)
         
         for app_res in app_res_list:
-            tmp_app_res.cpu_slice += app_res.cpu_slice
-            tmp_app_res.mem_slice += app_res.mem_slice
-            tmp_app_res.disk += app_res.disk
-            tmp_app_res.p += app_res.p
-            tmp_app_res.m += app_res.m
-            tmp_app_res.pm += app_res.pm
+            tmp_app_res.res_vector += app_res.res_vector
          
         return tmp_app_res        
     
-    @staticmethod
-    def get_var_mean_of_apps(inst_list, inst_app_dict, app_res_dict):
-        sum_var = 0
-        for each_inst in inst_list:
-            sum_var += app_res_dict[inst_app_dict[each_inst]].res_var
-
-        return sum_var / len(inst_list)
     
-    @staticmethod
-    # 得到迁出的 app list 在 machine 上的分数
-    def get_socre_of_apps(inst_list, inst_app_dict, app_res_dict, machine_cpu):
-        cpu_slice_per = np.array(np.zeros(SLICE_CNT))
-        for each_inst in inst_list:
-            cpu_slice_per += app_res_dict[inst_app_dict[each_inst]].cpu_slice
-
-        cpu_slice_per /= machine_cpu
-
-        return score_of_cpu_percent_slice(cpu_slice_per)

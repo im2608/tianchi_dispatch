@@ -5,12 +5,13 @@ Created on Jun 22, 2018
 '''
 
 from ResMgr import *
+from global_param import *
 
 def main():
     print(getCurrentTime(), 'running...')
     res_mgr = MachineResMgr()
     
-    inst_app_csv = csv.reader(open(r'%s\..\input\instance_deploy.csv' % runningPath, 'r'))
+    inst_app_csv = csv.reader(open(r'%s\..\input\%s\instance_deploy.csv' % (runningPath, data_set), 'r'))
     i = 0
     for each_inst in inst_app_csv:
         inst_id = int(each_inst[0])
