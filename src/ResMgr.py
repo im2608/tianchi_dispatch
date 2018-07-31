@@ -395,7 +395,7 @@ class MachineResMgr(object):
 
     def get_immigratable_machine_ex(self, inst_id, skipped_machine_id):
         immigratable_machine_list = []
-        scores_set = set()
+        scores_list = []
         
         app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
         
@@ -415,14 +415,14 @@ class MachineResMgr(object):
             immigrating_machine = self.machine_runing_info_dict[machine_id]
             if (immigrating_machine.can_dispatch(app_res, self.app_constraint_dict)):
                 increased_score = round(immigrating_machine.immigrating_delta_score(app_res), 2)
-                if (increased_score not in scores_set):
-                    scores_set.add(increased_score)
+                appended, scores_list = append_score_by_score_diff(scores_list, increased_score)
+                if (appended):
                     immigratable_machine_list.append( [{machine_id : [inst_id]},increased_score] )
         
         if (len(immigratable_machine_list) > 0):
             return immigratable_machine_list
         
-        scores_set.clear()
+        scores_list.clear()
         # 没有可迁入的 小/大 机器，这里重新尝试 大/小 机器
         if (does_prefer):
             machine_start_idx = 3001
@@ -438,8 +438,8 @@ class MachineResMgr(object):
             immigrating_machine = self.machine_runing_info_dict[machine_id]
             if (immigrating_machine.can_dispatch(app_res, self.app_constraint_dict)):
                 increased_score = round(immigrating_machine.immigrating_delta_score(app_res), 2)
-                if (increased_score not in scores_set):
-                    scores_set.add(increased_score)
+                appended, scores_list = append_score_by_score_diff(scores_list, increased_score)
+                if (appended):
                     immigratable_machine_list.append( [{machine_id : [inst_id]},increased_score] )
                     
         return immigratable_machine_list
@@ -497,31 +497,10 @@ class MachineResMgr(object):
 
                         if (each_current_tmp[1] >= machine_real_score):
                             continue
-                        
-                    if (len(solution_scores_list) == 0):
-                        migration_solution.append(each_current_tmp)
-                        solution_scores_list.append(each_current_tmp[1])
-                    elif (len(solution_scores_list) == 1):
-                        if (abs(each_current_tmp[1] - solution_scores_list[0]) >= MAX_SCORE_DIFF):
-                            migration_solution.append(each_current_tmp)
-                            solution_scores_list.append(each_current_tmp[1])
-                    else:
-                        if ((solution_scores_list[0] < each_current_tmp[1] and
-                             solution_scores_list[0] - each_current_tmp[1] >= MAX_SCORE_DIFF) or 
-                            (each_current_tmp[1] > solution_scores_list[-1] and
-                             each_current_tmp[1] - solution_scores_list[-1] >= MAX_SCORE_DIFF)):
-                            migration_solution.append(each_current_tmp)
-                            solution_scores_list.append(each_current_tmp[1])
-                        for i in range(len(solution_scores_list) - 1):
-                            if (each_current_tmp[1] > solution_scores_list[i] and 
-                                each_current_tmp[1] < solution_scores_list[i + 1] and
-                                each_current_tmp[1] - solution_scores_list[i] >= MAX_SCORE_DIFF and                                  
-                                each_current_tmp[1] - solution_scores_list[i + 1] <= -MAX_SCORE_DIFF):                            
-                                migration_solution.append(each_current_tmp)
-                                solution_scores_list.append(each_current_tmp[1])
-                                break
 
-                    solution_scores_list = sorted(solution_scores_list)
+                    appended, solution_scores_list = append_score_by_score_diff(solution_scores_list, each_current_tmp[1])
+                    if (appended):
+                        migration_solution.append(each_current_tmp)
 
         return migration_solution
      
@@ -605,7 +584,7 @@ class MachineResMgr(object):
             b_dispatched = self.ff_dispatch(inst_id, app_res, 3001, 6001)
             if (not b_dispatched):
                 b_dispatched = self.ff_dispatch(inst_id, app_res, 1, 3001)
-                
+
         if (b_dispatched):
             self.sort_machine()
             return True

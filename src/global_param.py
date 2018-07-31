@@ -62,10 +62,37 @@ def does_prefer_small_machine(app_res):
 
         return False
 
-data_set = 'a'
+data_set = 'b'
 
 ALPHA = 1.0 #启发因子，信息素的重要程度
 BETA = 2.0  #期望因子
 ROU = 0.5   #信息素残留参数
 
-MAX_SCORE_DIFF = 0.5
+MAX_SCORE_DIFF = 1
+def append_score_by_score_diff(score_list, score):
+    score_list = sorted(score_list)
+    appended = False
+    if (len(score_list) == 0):
+        score_list.append(score)
+        appended = True
+    elif (len(score_list) == 1):
+        if (abs(score - score_list[0]) >= MAX_SCORE_DIFF):
+            score_list.append(score)
+            appended = True
+    else:
+        if ((score_list[0] < score and score_list[0] - score >= MAX_SCORE_DIFF) 
+            or 
+            (score > score_list[-1] and score - score_list[-1] >= MAX_SCORE_DIFF)):
+            score_list.append(score)
+            appended = True
+        for i in range(len(score_list) - 1):
+            if (score > score_list[i] and score < score_list[i + 1] and
+                score - score_list[i] >= MAX_SCORE_DIFF and score - score_list[i + 1] <= -MAX_SCORE_DIFF):                            
+                score_list.append(score)
+                appended = True
+
+    if (appended):
+        score_list = sorted(score_list)
+
+    return appended, score_list
+

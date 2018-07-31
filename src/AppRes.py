@@ -34,6 +34,9 @@ class AppRes(object):
     def get_disk(self):
         return self.res_vector[196]
     
+    def get_cpu_mean(self):
+        return np.mean(self.get_cpu_slice())
+    
     @staticmethod
     def sum_app_res_by_inst(inst_list, inst_app_dict, app_res_dict):
         tmp_app_res = AppRes(None)
@@ -51,6 +54,5 @@ class AppRes(object):
         for app_res in app_res_list:
             tmp_app_res.res_vector += app_res.res_vector
          
-        return tmp_app_res        
-    
+        return tmp_app_res     
     

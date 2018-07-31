@@ -61,6 +61,7 @@ class MachineRes(object):
 #                 self.p >= app_res.p and
 #                 self.m >= app_res.m  and
 #                 self.pm >= app_res.pm)
+
         
     @staticmethod
     def sum_machine_remaining_res(sorted_machine_res):

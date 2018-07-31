@@ -22,7 +22,6 @@ class ACS(object):
         self.cur_def_pheromone = 10000 / 6100
         self.max_pheromone = self.cur_def_pheromone
         self.min_pheromon = 0.5 * self.max_pheromone
-        self.machine_item_pheromone = {}
 
         self.global_min_ant_dispatch = None
         self.global_min_ant_score = 1e9
@@ -55,11 +54,21 @@ class ACS(object):
             if (len(each_inst[2]) > 0):
                 machine_id = int(each_inst[2])
                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
+                                                                             
                 self.inst_running_machine_dict[inst_id] = machine_id
 
         self.global_min_iter = 0
         self.global_min_ant = 0
         self.global_min_score = 1e9
+        
+        self.machine_item_pheromone = {}
+        pheromone_file = r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set)
+        if (os.path.exists(pheromone_file)):
+            with open(pheromone_file, 'r') as pheromone_file:
+                self.machine_item_pheromone = json.load(pheromone_file)  
+                self.cur_def_pheromone = float(self.machine_item_pheromone['def'])
+        else:
+            self.machine_item_pheromone['def'] = self.cur_def_pheromone
             
 
     def submiteOneSubProcess(self, iter_idx, ant_number, runningSubProcesses):
@@ -122,18 +131,17 @@ class ACS(object):
 
             runningSubProcesses = {}
 
-            self.machine_item_pheromone['def'] = self.cur_def_pheromone
             with open(r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set), 'w') as pheromone_file:
                 json.dump(self.machine_item_pheromone, pheromone_file)
-
+ 
             for ant_number in range(ant_cnt):
                 self.submiteOneSubProcess(iter_idx, ant_number, runningSubProcesses)
-  
+   
             while True:
                 if (len(runningSubProcesses) == 0):
                     print_and_log("iter %d, All of ant finished" % (iter_idx))
                     break
-  
+   
                 ant_number = self.waitSubprocesses(runningSubProcesses)
                 if (ant_number >= 0):
                     print_and_log('Iter %d Ant %d finished, %d ants are running' % (iter_idx, ant_number, len(runningSubProcesses)))
@@ -157,6 +165,7 @@ class ACS(object):
                 self.global_min_ant = cycle_min_ant_number
 
             self.cur_def_pheromone *= 1 - self.evaporating_rate # 每次迭代都会导致信息素挥发
+            self.machine_item_pheromone['def'] = self.cur_def_pheromone
             print_and_log('iteration %d min score %f on, global min %f, update def pheromone to %f' % 
                           (iter_idx, cycle_min_ant_score, self.global_min_score, self.cur_def_pheromone))
 
@@ -173,7 +182,7 @@ class ACS(object):
         return
 
     def output_submition(self):
-        print_and_log("Globa min iter %d, global min ant %d" % (self.global_min_iter, self.global_min_ant))
+        print_and_log("Global min iter %d, global min ant %d" % (self.global_min_iter, self.global_min_ant))
 #         filename = 'submit_%s.csv' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 #         output_file = open(r'%s\..\output\%s\%s' % (runningPath, data_set, filename), 'w')
 #         print(getCurrentTime(), 'writing output file %s' % filename)
