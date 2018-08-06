@@ -19,13 +19,21 @@ from Ant import *
 class ACS(object):
     def __init__(self):
         self.evaporating_rate = 0.4 # 信息素挥发率
-        self.cur_def_pheromone = 10000 / 6100
+        self.cur_def_pheromone = 1 / 7280
         self.max_pheromone = self.cur_def_pheromone
         self.min_pheromon = 0.5 * self.max_pheromone
 
         self.global_min_ant_dispatch = None
         self.global_min_ant_score = 1e9
         self.global_min_ant_migration_list = []
+        
+        log_file = r'%s\..\log\ACS.log' % (runningPath)
+
+        logging.basicConfig(level=logging.INFO,
+                            format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
+                            datefmt='%a, %d %b %Y %H:%M:%S',
+                            filename=log_file,
+                            filemode='w')
         
         print(getCurrentTime(), 'loading app_resources.csv...')
         self.app_res_dict = [0 for x in range(APP_CNT + 1)]
@@ -74,26 +82,26 @@ class ACS(object):
     def submiteOneSubProcess(self, iter_idx, ant_number, runningSubProcesses):
         cmdLine = "python Ant.py iter=%d number=%d" % (iter_idx, ant_number)
         sub = subprocess.Popen(cmdLine, shell=True)
-        runningSubProcesses[ant_number] = sub
+        runningSubProcesses[(ant_number, time.time())] = sub
         print_and_log("running cmd line: %s" % cmdLine)
         time.sleep(1)
         return
     
 
     def waitSubprocesses(self, runningSubProcesses):
-        for ant_number in runningSubProcesses:
-            sub = runningSubProcesses[ant_number]
+        for (ant_number, start_time) in runningSubProcesses:
+            sub = runningSubProcesses[(ant_number, start_time)]
             ret = subprocess.Popen.poll(sub)
             if ret == 0:
-                runningSubProcesses.pop(ant_number)
-                return ant_number
+                runningSubProcesses.pop((ant_number, start_time))
+                return ant_number, start_time
             elif ret is None:
                 time.sleep(1) # running
             else:
-                runningSubProcesses.pop(ant_number)
-                return ant_number
+                runningSubProcesses.pop((ant_number, start_time))
+                return ant_number, start_time
 
-        return -1
+        return -1, -1
     
     # 在不解决约束冲突的基础上加载 Ant 的输出， Ant 会解决约束冲突 
     def dispatch_inst(self, iter_idx, ant_number):
@@ -124,8 +132,8 @@ class ACS(object):
         return scores
 
     def ant_search(self):
-        ant_cnt = 10
-        iteration_cnt = 5
+        ant_cnt = 12
+        iteration_cnt = 10
 
         for iter_idx in range(iteration_cnt):
 
@@ -142,9 +150,9 @@ class ACS(object):
                     print_and_log("iter %d, All of ant finished" % (iter_idx))
                     break
    
-                ant_number = self.waitSubprocesses(runningSubProcesses)
+                ant_number, start_time = self.waitSubprocesses(runningSubProcesses)
                 if (ant_number >= 0):
-                    print_and_log('Iter %d Ant %d finished, %d ants are running' % (iter_idx, ant_number, len(runningSubProcesses)))
+                    print_and_log('Iter %d Ant %d finished, ran %d secs, %d ants are running' % (iter_idx, ant_number, time.time() - start_time, len(runningSubProcesses)))
   
             # 得到得分最低的 ant
             cycle_min_ant_score = 1e9;

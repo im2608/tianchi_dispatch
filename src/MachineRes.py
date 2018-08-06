@@ -24,11 +24,22 @@ class MachineRes(object):
         self.res_vector = np.hstack((cpu_slice, mem_slice, disk, p, m, pm))
         
         self.machine_score = 0
+        
+        self.cpu_mean = self.cpu
+        self.cpu_men_idx = int(self.cpu_mean / MAX_SCORE_DIFF)
     
         return
     
     def get_cpu_slice(self):
         return self.res_vector[:98]
+    
+    # 剩余 cpu 容量的均值
+    def get_cpu_mean(self):
+        return self.cpu_mean
+    
+    # 剩余 cpu 容量的均值在分组后的索引
+    def get_cpu_mean_idx(self):
+        return self.cpu_men_idx
 
        
     def update_machine_res(self, app_res, ratio):
@@ -47,10 +58,18 @@ class MachineRes(object):
 #         self.res_vector = np.hstack((self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm))
 #         
 #         self.cpu_percentage = self.cpu_slice.max() / self.cpu
-        
+
         self.res_vector += ratio * app_res.res_vector
+
+        self.res_vector = np.where(np.less(self.res_vector , 0.001), 0, self.res_vector )
+
+        self.cpu_mean = np.mean(self.res_vector[:98])
         
+        self.cpu_men_idx = int(self.cpu_mean / MAX_SCORE_DIFF)
+
         self.machine_score = score_of_cpu_percent_slice((self.cpu - self.res_vector[:98]) / self.cpu)
+        
+        
         
     # 机器资源是否能够容纳 inst
     def meet_inst_res_require(self, app_res):

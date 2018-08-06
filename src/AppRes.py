@@ -22,6 +22,8 @@ class AppRes(object):
             pm = 0
 
         self.res_vector = np.hstack((cpu_slice, mem_slice, disk, p, m, pm))
+        
+        self.cpu_mean = np.mean(cpu_slice)
 
         return
     
@@ -35,7 +37,7 @@ class AppRes(object):
         return self.res_vector[196]
     
     def get_cpu_mean(self):
-        return np.mean(self.get_cpu_slice())
+        return self.cpu_mean
     
     @staticmethod
     def sum_app_res_by_inst(inst_list, inst_app_dict, app_res_dict):

@@ -18,13 +18,7 @@ class MachineRunningInfo(object):
     
     # 得到启发式信息: （剩余资源vec - app 资源 vec） 的均值
     def get_heuristic(self, app_res):
-        tmp = self.running_machine_res.get_cpu_slice() - app_res.get_cpu_slice()
-        tmp = np.where(np.less(tmp, 0.0001), 0, tmp)
-        
-        if (np.sum(tmp) > 0):
-            return 100 / np.mean(tmp)
-        else:
-            return 0
+        return self.running_machine_res.get_cpu_mean() - app_res.get_cpu_mean()    
     
     # ratio 为 1 或 -1，  dispatch app 时 为 -1， 释放app时 为 1
     def update_machine_res(self, inst_id, app_res, ratio):
@@ -46,7 +40,7 @@ class MachineRunningInfo(object):
         return True
     
     def sort_running_inst_list(self, app_res_dict, inst_app_dict):
-        self.running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=True)
+        self.running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=False)
 
     # 查找机器上的 running inst list 是否有违反约束的 inst
     def any_self_violate_constriant(self, inst_app_dict, app_res_dict, app_constraint_dict):
@@ -77,6 +71,12 @@ class MachineRunningInfo(object):
     
     def get_cpu(self):
         return self.running_machine_res.cpu
+    
+    def get_cpu_mean(self):
+        return self.running_machine_res.cpu_mean
+    
+    def get_cpu_mean_idx(self):
+        return self.running_machine_res.cpu_men_idx
 
     def get_cpu_percentage(self):
         return max(self.running_machine_res.cpu_percentage - 0.5, 0) # cpu 使用率低于0.5 的归为一类 6027

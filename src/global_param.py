@@ -47,6 +47,8 @@ def print_and_log(msg):
 
 # return True for small machine, False for big machine otherwise
 def does_prefer_small_machine(app_res):
+    return False
+
     cpu_mean = np.mean(app_res.get_cpu_slice())
     mem_mean = np.mean(app_res.get_mem_slice())
     disk = app_res.get_disk()
@@ -62,37 +64,97 @@ def does_prefer_small_machine(app_res):
 
         return False
 
-data_set = 'b'
+data_set = 'a'
 
 ALPHA = 1.0 #启发因子，信息素的重要程度
 BETA = 2.0  #期望因子
 ROU = 0.5   #信息素残留参数
 
-MAX_SCORE_DIFF = 1
+MAX_SCORE_DIFF = 0.3
+
+def find_insert_pos_no(score_list, score, s, e):
+    list_len = e - s
+    if (list_len == 2):
+        return e
+    
+    mid = int((e + s)/2)
+    if (score_list[mid - 1] < score and score_list[mid] > score):
+        return mid
+
+    if (score_list[mid] < score and score_list[mid + 1] > score):
+        return mid + 1
+    
+    if (score < score_list[mid]):
+        return find_insert_pos(score_list, score, s, mid)
+    
+    if (score > score_list[mid]):
+        return find_insert_pos(score_list, score, mid + 1, e)
+    
+    return mid
+
+def find_insert_pos(score_list, score, s, e):
+    mid = int((e + s)/2)
+    if (score < score_list[mid]):
+        if (score > score_list[mid - 1]):        
+            return mid
+        else:
+            return find_insert_pos(score_list, score, s, mid - 1)
+    else:
+        if (score < score_list[mid + 1]):        
+            return mid + 1
+        else:
+            return find_insert_pos(score_list, score, mid + 1, e)
+
 def append_score_by_score_diff(score_list, score):
-    score_list = sorted(score_list)
     appended = False
     if (len(score_list) == 0):
         score_list.append(score)
-        appended = True
-    elif (len(score_list) == 1):
-        if (abs(score - score_list[0]) >= MAX_SCORE_DIFF):
+        return True, score_list
+    
+    if (score < score_list[0]):
+        if (score_list[0] - score >= MAX_SCORE_DIFF):
+            score_list.insert(0, score)
+            return True, score_list
+        else: 
+            return False, score_list
+        
+    if (score > score_list[-1]):
+        if (score - score_list[-1] >= MAX_SCORE_DIFF):
             score_list.append(score)
-            appended = True
-    else:
-        if ((score_list[0] < score and score_list[0] - score >= MAX_SCORE_DIFF) 
-            or 
-            (score > score_list[-1] and score - score_list[-1] >= MAX_SCORE_DIFF)):
-            score_list.append(score)
-            appended = True
-        for i in range(len(score_list) - 1):
-            if (score > score_list[i] and score < score_list[i + 1] and
-                score - score_list[i] >= MAX_SCORE_DIFF and score - score_list[i + 1] <= -MAX_SCORE_DIFF):                            
-                score_list.append(score)
-                appended = True
+            return True, score_list
+        else:
+            return False, score_list
 
-    if (appended):
-        score_list = sorted(score_list)
+    s = 0
+    e = len(score_list)
+    pos = None
+    while (s <= e):
+        m = int((s + e)/2)
+        if (score <= score_list[m]):
+            if (score >= score_list[m - 1]):
+                pos = m
+                break
+            else:
+                e = m - 1
+        else:
+            if (score <= score_list[m + 1]):
+                pos = m + 1
+                break
+            else:
+                s = m + 1
+
+    if (pos is not None and score > score_list[pos - 1] and score < score_list[pos] and
+        score - score_list[pos - 1] >= MAX_SCORE_DIFF and score - score_list[pos] <= -MAX_SCORE_DIFF):                            
+        score_list.insert(pos, score)
+        appended = True
+        
+            
+#     for i in range(len(score_list) - 1):
+#         if (score > score_list[i] and score < score_list[i + 1] and
+#             score - score_list[i] >= MAX_SCORE_DIFF and score - score_list[i + 1] <= -MAX_SCORE_DIFF):                            
+#             score_list.insert(i + 1, score)
+#             appended = True
+#             break                
 
     return appended, score_list
 

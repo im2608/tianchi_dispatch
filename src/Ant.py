@@ -75,7 +75,6 @@ class Ant(object):
                 if (inst_id in self.inst_running_machine_dict):
                     self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].release_app(inst_id, 
                                                                 self.app_res_dict[self.inst_app_dict[inst_id]])
-                    
                 self.inst_running_machine_dict[inst_id] = machine_id
         
         self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list)
@@ -85,7 +84,7 @@ class Ant(object):
             self.cur_def_pheromone = float(self.machine_item_pheromone['def'])               
 
         # 加载一个可行解，在它的基础上进行优化
-        inited_filename = r'%s\..\input\%s\submit_20180727_175925_optimized.csv' % (runningPath, data_set)
+        inited_filename = r'%s\..\input\%s\feasible_solution.csv' % (runningPath, data_set)
         print(getCurrentTime(), 'loading a solution %s' % inited_filename)
 
         inst_disp_csv = csv.reader(open(inited_filename, 'r'))
@@ -323,117 +322,130 @@ class Ant(object):
     def dispatch_inst(self):
         total_inst = len(self.dispatchable_inst_list)
         
-#         total_inst = int(total_inst / 100)        
-#         self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list[0:total_inst])
+        total_inst = int(total_inst / 100)        
+        self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list[0:total_inst])
         
-        part1_time = 0
-        part2_time = 0
-        part3_time = 0
+        part1_time = 0        
         part21_time = 0
         part22_time = 0
         part23_time = 0
+        part11_time = 0
+        part12_time = 0
+        
+        part_can = 0
+        
+        machine_id_list = [i for i in range(1, MACHINE_CNT + 1)]
         
         for i in range(total_inst):
-            inst_id = self.dispatchable_inst_list[i]
-            start_time = time.time()
+            inst_id = self.dispatchable_inst_list[i]            
             str_inst_id = str(inst_id)
-            
+
             app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
 
             # 在每台机器上计算启发式信息
             machine_heuristic_dict = {}
-            heuristic_set = set()
-            for machine_id, machine_running_res in self.machine_runing_info_dict.items():
-                if (machine_id == self.inst_running_machine_dict[inst_id]):
+            cpu_mean_group_list = [0 for i in range(int(MAX_CPU/MAX_SCORE_DIFF + 1))]
+            start_time = time.time()
+#             machine_id_list = shuffle(machine_id_list)
+            for machine_id in machine_id_list:
+                part11_s = time.time()
+                machine_running_res = self.machine_runing_info_dict[machine_id]
+                if (machine_id == self.inst_running_machine_dict[inst_id]): 
                     continue
                 
-                # 相同的启发式信息意味着迁入后 cpu 相同，这里只保留一台
-                heuristic = round(machine_running_res.get_heuristic(app_res), 2)
-                if (heuristic not in heuristic_set):
-                    machine_heuristic_dict[machine_id] = heuristic
-                    heuristic_set.add(heuristic) 
+                part11_e = time.time()
+                part11_time += part11_e - part11_s
+
+                part12_s = time.time()
+                # cpu 均值相近的机器启发式信息也相近，这里只保留 cpu 均值有一定距离的机器
+                idx = machine_running_res.get_cpu_mean_idx()
+                
+                part12_e = time.time()
+                part12_time += part12_e - part12_s
+
+                if (cpu_mean_group_list[idx] == 0):
+                    can_s = time.time()
+                    can = machine_running_res.can_dispatch(app_res, self.app_constraint_dict)
+                    can_e = time.time()
+                    part_can += can_e - can_s
+                    if (can):
+                        heuristic = round(machine_running_res.get_heuristic(app_res), 2)
+                        machine_heuristic_dict[machine_id] = heuristic
+                        cpu_mean_group_list[idx] = 1
 
             end1_time = time.time()
             part1_time += end1_time - start_time
 
+            if (len(machine_heuristic_dict) == 0):
+                print("Ant(%d, %d) inst %d is not migratable on machine %d \r" % \
+                              (self.iter_idx, self.ant_number, inst_id, self.inst_running_machine_dict[inst_id]), end='')
+                continue
+
             # 各个 machine 被选中的概率
             total_proba = 0
             machine_proba_dict = {}
-            while (len(machine_heuristic_dict) > 0):
-                start21_time = time.time()
-                
-                max_proba = 0                
-                
-                if (total_proba == 0):
-                    for machine_id, machine_heuristic in machine_heuristic_dict.items():
-                        str_machine_id = str(machine_id)
-                        machine_running_res = self.machine_runing_info_dict[machine_id]
     
-                        pheromone = self.cur_def_pheromone
-        
-                        if (str_machine_id in self.machine_item_pheromone and str_inst_id in self.machine_item_pheromone[str_machine_id]):
-                            pheromone = self.machine_item_pheromone[str_machine_id][str_inst_id]
-        
-                        machine_proba_dict[machine_id] = pow(pheromone, ALPHA) * pow(machine_heuristic, BETA)
-                        total_proba += machine_proba_dict[machine_id]
-                        if (max_proba < machine_proba_dict[machine_id]):
-                            max_proba = machine_proba_dict[machine_id]
-                            max_proba_machine = machine_id
-                
-                end21_time = time.time()
-                part21_time += end21_time - start21_time
+            start21_time = time.time()
 
-                Q = 0.5
-                if (random.uniform(0.0, 1.0) < Q):
-                    selected_machine = max_proba_machine
-                else:
-                    selected_machine = None
-                    random_proba = random.uniform(0.0, total_proba)
-                    for machine_id, machine_proba in machine_proba_dict.items():
-                        random_proba -= machine_proba
-                        if (random_proba <= 0.0001):
-                            selected_machine = machine_id
-                            break
+            max_proba = 0
+
+            for machine_id, machine_heuristic in machine_heuristic_dict.items():
+                str_machine_id = str(machine_id)
+                machine_running_res = self.machine_runing_info_dict[machine_id]
+    
+                pheromone = self.cur_def_pheromone
+    
+                if (str_machine_id in self.machine_item_pheromone and str_inst_id in self.machine_item_pheromone[str_machine_id]):
+                    pheromone = self.machine_item_pheromone[str_machine_id][str_inst_id]
+    
+                machine_proba_dict[machine_id] = pow(pheromone, ALPHA) * pow(machine_heuristic, BETA)
+                total_proba += machine_proba_dict[machine_id]
+                if (max_proba < machine_proba_dict[machine_id]):
+                    max_proba = machine_proba_dict[machine_id]
+                    max_proba_machine = machine_id
+
+            end21_time = time.time()
+            part21_time += end21_time - start21_time
+
+            Q = 0.5
+            if (random.uniform(0.0, 1.0) < Q):
+                selected_machine = max_proba_machine
+            else:
+                selected_machine = None
+                random_proba = random.uniform(0.0, total_proba)
+                for machine_id, machine_proba in machine_proba_dict.items():
+                    random_proba -= machine_proba
+                    if (random_proba <= 0.0001):
+                        selected_machine = machine_id
+                        break
+        
+                if (selected_machine is None):
+                    if (len(machine_proba_dict) == 1):
+                        rand_machine = 0
+                    else:
+                        rand_machine = random.randint(0, len(machine_proba_dict) - 1)
+                    tmp = list(machine_proba_dict.keys())
+                    selected_machine = tmp[rand_machine]
+            end22_time = time.time()
+            part22_time += end22_time - end21_time
+
+            if (self.machine_runing_info_dict[selected_machine].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
+                if (inst_id in self.inst_running_machine_dict):
+                    self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].release_app(inst_id, app_res)
+
+                self.inst_running_machine_dict[inst_id] = selected_machine
+                self.migrating_list.append('inst_%d,machine_%d' % (inst_id, selected_machine))
+            else:
+                print_and_log("ERROR! dispatch_inst() Failed to immigrate inst %d to machine %d" % (inst_id, selected_machine))
+                exit(-1)
             
-                    if (selected_machine is None):
-                        if (len(machine_proba_dict) == 1):
-                            rand_machine = 0
-                        else:
-                            rand_machine = random.randint(0, len(machine_proba_dict) - 1)
-                        tmp = list(machine_proba_dict.keys())
-                        selected_machine = tmp[rand_machine]
-                end22_time = time.time()
-                part22_time += end22_time - end21_time
-    
-                if (not self.machine_runing_info_dict[selected_machine].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
-                    machine_heuristic_dict.pop(selected_machine)
-                    total_proba -= machine_proba_dict.pop(selected_machine)
-                    if (selected_machine == max_proba_machine):  
-                        max_proba = 0
-                        for machine_id, machine_proba in machine_proba_dict.items():
-                            if (max_proba < machine_proba):
-                                max_proba = machine_proba
-                                max_proba_machine = machine_id                         
-                else:
-                    if (inst_id in self.inst_running_machine_dict):
-                        self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].release_app(inst_id, app_res)
-    
-                    self.inst_running_machine_dict[inst_id] = selected_machine
-                    self.migrating_list.append('inst_%d,machine_%d' % (inst_id, selected_machine))
-                    break
-                
-                end23_time = time.time()
-                part23_time += end23_time - end22_time
-
-            if (len(machine_heuristic_dict) == 0):
-                print_and_log("inst %d is not migratable on machine %d" % (inst_id, self.inst_running_machine_dict[inst_id]))
-
-            end3_time = time.time()
-            part3_time += end3_time - end1_time
+            end23_time = time.time()
+            part23_time += end23_time - end22_time
 
             if (i % 100 == 0):
-                print(getCurrentTime(), "Ant(%d, %d) %d / %d inst handled, part1 %d, part21 %d, part22 %d, part23 %d\r" % \
-                      (self.iter_idx, self.ant_number, i, total_inst, part1_time, part21_time, part22_time, part23_time), end='')
+                print(getCurrentTime(), "Ant(%d, %d) %d / %d inst handled, part1 %d, part11 %d, part12 %d, part21 %d, part22 %d, part23 %d, part_can %d \r" % \
+                      (self.iter_idx, self.ant_number, i, total_inst, part1_time, part11_time, part12_time,
+                       part21_time, part22_time, part23_time, part_can), end='')
 
         return 
     
