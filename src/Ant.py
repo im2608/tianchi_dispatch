@@ -78,12 +78,10 @@ class Ant(object):
                 self.inst_running_machine_dict[inst_id] = machine_id
         
         self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list)
+        
+        self.load_pheromone()
 
-        with open(r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set), 'r') as pheromone_file:
-            self.machine_item_pheromone = json.load(pheromone_file)  
-            self.cur_def_pheromone = float(self.machine_item_pheromone['def'])               
-
-        # 加载一个可行解，在它的基础上进行优化
+        # 加载一个可行解，在它的基础上进行优化, 并根据可行解来更新信息素
         inited_filename = r'%s\..\input\%s\feasible_solution.csv' % (runningPath, data_set)
         print(getCurrentTime(), 'loading a solution %s' % inited_filename)
 
@@ -96,16 +94,24 @@ class Ant(object):
             if (not self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
                 print_and_log("ERROR! Ant(%d, %d) Failed to immigrate inst %d to machine %d" % (self.iter_idx, self.ant_number, inst_id, machine_id))
                 exit(-1)
-                
-            if (inst_id in self.inst_running_machine_dict):
-                self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].release_app(inst_id, app_res)
-                
-            self.inst_running_machine_dict[inst_id] = machine_id
-            self.migrating_list.append('%s,%s' % (each_inst[0], each_inst[1]))
-                
-            # 根据可行解来更新信息素
+
             str_machine_id = str(machine_id)
             str_inst_id = str(machine_id)
+
+            if (inst_id in self.inst_running_machine_dict):
+                migrating_machine_id = self.inst_running_machine_dict[inst_id]
+                self.machine_runing_info_dict[migrating_machine_id].release_app(inst_id, app_res)
+
+                # 从 migrating_machine_id 迁出，相应地删除信息素
+                str_migrating_machine_id = str(migrating_machine_id)
+                if (str_migrating_machine_id in self.machine_item_pheromone and str_inst_id in self.machine_item_pheromone[str_migrating_machine_id]):
+                    self.machine_item_pheromone[str_migrating_machine_id].pop(str_inst_id)
+                    if (len(self.machine_item_pheromone[str_migrating_machine_id]) == 0):
+                        self.machine_item_pheromone.pop(str_migrating_machine_id)
+
+            # 迁入 machine_id ， 相应地增加信息素
+            self.inst_running_machine_dict[inst_id] = machine_id
+            self.migrating_list.append('%s,%s' % (each_inst[0], each_inst[1]))
 
             if (str_machine_id not in self.machine_item_pheromone):
                 self.machine_item_pheromone[str_machine_id] = {}
@@ -113,7 +119,7 @@ class Ant(object):
             if (str_inst_id  not in self.machine_item_pheromone[str_machine_id]):
                 self.machine_item_pheromone[str_machine_id][str_inst_id] = self.cur_def_pheromone 
 
-            self.machine_item_pheromone[str_machine_id][str_inst_id] = self.cur_def_pheromone + 10000 / 7500
+#             self.machine_item_pheromone[str_machine_id][str_inst_id] = self.cur_def_pheromone + 10000 / 7500
 
 
     def get_immigratable_machine_ex(self, inst_id, skipped_machine_id):
@@ -323,7 +329,7 @@ class Ant(object):
         total_inst = len(self.dispatchable_inst_list)
         
         total_inst = int(total_inst / 100)        
-        self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list[0:total_inst])
+#         self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list[0:total_inst])
         
         part1_time = 0        
         part21_time = 0
@@ -335,6 +341,7 @@ class Ant(object):
         part_can = 0
         
         machine_id_list = [i for i in range(1, MACHINE_CNT + 1)]
+#         machine_id_list = shuffle(machine_id_list)
         
         for i in range(total_inst):
             inst_id = self.dispatchable_inst_list[i]            
@@ -346,7 +353,7 @@ class Ant(object):
             machine_heuristic_dict = {}
             cpu_mean_group_list = [0 for i in range(int(MAX_CPU/MAX_SCORE_DIFF + 1))]
             start_time = time.time()
-#             machine_id_list = shuffle(machine_id_list)
+            
             for machine_id in machine_id_list:
                 part11_s = time.time()
                 machine_running_res = self.machine_runing_info_dict[machine_id]
@@ -362,6 +369,10 @@ class Ant(object):
                 
                 part12_e = time.time()
                 part12_time += part12_e - part12_s
+                
+                migrating_delta_score = 1e9
+                if (inst_id in self.inst_running_machine_dict):
+                    migrating_delta_score = self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].migrating_delta_score(app_res)
 
                 if (cpu_mean_group_list[idx] == 0):
                     can_s = time.time()
@@ -369,16 +380,18 @@ class Ant(object):
                     can_e = time.time()
                     part_can += can_e - can_s
                     if (can):
-                        heuristic = round(machine_running_res.get_heuristic(app_res), 2)
-                        machine_heuristic_dict[machine_id] = heuristic
-                        cpu_mean_group_list[idx] = 1
+                        immigrate_deleta_score = machine_running_res.immigrating_delta_score(app_res)
+                        if (migrating_delta_score > immigrate_deleta_score):
+                            heuristic = round(machine_running_res.get_heuristic(app_res), 2)
+                            machine_heuristic_dict[machine_id] = heuristic
+                            cpu_mean_group_list[idx] = 1
 
             end1_time = time.time()
             part1_time += end1_time - start_time
 
             if (len(machine_heuristic_dict) == 0):
-                print("Ant(%d, %d) inst %d is not migratable on machine %d \r" % \
-                              (self.iter_idx, self.ant_number, inst_id, self.inst_running_machine_dict[inst_id]), end='')
+#                 print("Ant(%d, %d) inst %d is not migratable on machine %d \r" % \
+#                               (self.iter_idx, self.ant_number, inst_id, self.inst_running_machine_dict[inst_id]), end='')
                 continue
 
             # 各个 machine 被选中的概率
@@ -473,6 +486,25 @@ class Ant(object):
             ant_pheromone_dict[machine_a][machine_b] += 100000 / scors
         
         return
+    
+    def load_pheromone(self):
+        self.cur_def_pheromone = 1 / 7280
+        self.machine_item_pheromone = {}
+        pheromone_file_name = r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set)
+        print(getCurrentTime(), 'loading machine_item_pheromone')
+        if (os.path.exists(pheromone_file_name)):
+            with open(pheromone_file_name , 'r') as pheromone_file:
+                pheromone_csv = csv.reader(pheromone_file)
+                for each_pheromone in pheromone_csv:
+                    machine_id = int(each_pheromone[0])
+                    inst_id = int(each_pheromone[1]) 
+                    pheromone = float(each_pheromone[2])
+                    
+                    if (machine_id not in self.machine_item_pheromone):
+                        self.machine_item_pheromone[machine_id] = {}
+                        
+                    self.machine_item_pheromone[machine_id][inst_id] = pheromone
+        
 
     def output_ant_solution(self):
         filename = 'iter_%d_ant_%d.csv' % (self.iter_idx, self.ant_number)
@@ -483,8 +515,25 @@ class Ant(object):
             output_file.write('%s\n' % (each_migrating))
 
         output_file.close()
-            
+    
+def test_proba():
+    proba = 9.8242
+    each_proba = [3.456, 4.5678, 1.8004]
+    proba_dict = {0:0, 1:0, 2:0}
+    for i in range(10000):
+        random_proba = random.uniform(0.0, proba)
+        for i in range(len(each_proba)):
+            random_proba -= each_proba[i]
+            if (random_proba <= 0):
+                proba_dict[i] += 1
+                break
+                
+    print(proba_dict)
+
 if __name__ == '__main__':
+#     test_proba()
+#     exit(1)
+    
     iter_idx = int(sys.argv[1].split("=")[1])
     ant_number = int(sys.argv[2].split("=")[1])
     

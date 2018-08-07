@@ -51,6 +51,7 @@ def corss_big_small_machine():
         
     output_file.close()
          
+         
     
 if __name__ == '__main__':
     app_classification()

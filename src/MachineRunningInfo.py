@@ -16,9 +16,9 @@ class MachineRunningInfo(object):
         self.running_app_dict = {}
         return
     
-    # 得到启发式信息: （剩余资源vec - app 资源 vec） 的均值
+    # 得到启发式信息: 1 / 剩余 cpu 的均值
     def get_heuristic(self, app_res):
-        return self.running_machine_res.get_cpu_mean() - app_res.get_cpu_mean()    
+        return 1 / (self.running_machine_res.get_cpu_mean() - app_res.get_cpu_mean())    
     
     # ratio 为 1 或 -1，  dispatch app 时 为 -1， 释放app时 为 1
     def update_machine_res(self, inst_id, app_res, ratio):

@@ -19,9 +19,9 @@ from Ant import *
 class ACS(object):
     def __init__(self):
         self.evaporating_rate = 0.4 # 信息素挥发率
-        self.cur_def_pheromone = 1 / 7280
+        self.cur_def_pheromone = 1 / (7280 * (1 - self.evaporating_rate))
         self.max_pheromone = self.cur_def_pheromone
-        self.min_pheromon = 0.5 * self.max_pheromone
+        self.min_pheromone = 0.5 * self.max_pheromone
 
         self.global_min_ant_dispatch = None
         self.global_min_ant_score = 1e9
@@ -70,13 +70,13 @@ class ACS(object):
         self.global_min_score = 1e9
         
         self.machine_item_pheromone = {}
-        pheromone_file = r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set)
-        if (os.path.exists(pheromone_file)):
-            with open(pheromone_file, 'r') as pheromone_file:
-                self.machine_item_pheromone = json.load(pheromone_file)  
-                self.cur_def_pheromone = float(self.machine_item_pheromone['def'])
-        else:
-            self.machine_item_pheromone['def'] = self.cur_def_pheromone
+#         pheromone_file = r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set)
+#         if (os.path.exists(pheromone_file)):
+#             with open(pheromone_file, 'r') as pheromone_file:
+#                 self.machine_item_pheromone = json.load(pheromone_file)  
+#                 self.cur_def_pheromone = float(self.machine_item_pheromone['def'])
+#         else:
+#             self.machine_item_pheromone['def'] = self.cur_def_pheromone
             
 
     def submiteOneSubProcess(self, iter_idx, ant_number, runningSubProcesses):
@@ -130,17 +130,29 @@ class ACS(object):
             scores += machine_running_res.get_machine_real_score()
 
         return scores
+    
+    def dump_pheromone(self):
+        if (len(self.machine_item_pheromone) == 0):
+            return
+
+        with open(r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set), 'w') as pheromone_file:
+            for machine_id in range(1, MACHINE_CNT + 1):
+                if machine_id not in self.machine_item_pheromone:
+                    continue
+                
+                for inst_id, pheromone in self.machine_item_pheromone[machine_id].items():
+                    pheromone_file.write('%d,%d,%s\n' % (machine_id, inst_id, str(pheromone)))
+
 
     def ant_search(self):
-        ant_cnt = 12
-        iteration_cnt = 10
+        ant_cnt = 18
+        iteration_cnt = 100
 
         for iter_idx in range(iteration_cnt):
 
             runningSubProcesses = {}
-
-            with open(r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set), 'w') as pheromone_file:
-                json.dump(self.machine_item_pheromone, pheromone_file)
+            
+            self.dump_pheromone()
  
             for ant_number in range(ant_cnt):
                 self.submiteOneSubProcess(iter_idx, ant_number, runningSubProcesses)
@@ -172,21 +184,29 @@ class ACS(object):
                 self.global_min_iter = iter_idx
                 self.global_min_ant = cycle_min_ant_number
 
-            self.cur_def_pheromone *= 1 - self.evaporating_rate # 每次迭代都会导致信息素挥发
-            self.machine_item_pheromone['def'] = self.cur_def_pheromone
-            print_and_log('iteration %d min score %f on, global min %f, update def pheromone to %f' % 
-                          (iter_idx, cycle_min_ant_score, self.global_min_score, self.cur_def_pheromone))
+#             self.cur_def_pheromone *= 1 - self.evaporating_rate # 每次迭代都会导致信息素挥发
+#             self.machine_item_pheromone['def'] = self.cur_def_pheromone
+            self.max_pheromone = 1 / (self.global_min_score * (1 - self.evaporating_rate))
+            self.min_pheromone = 0.5 * self.max_pheromone
+            print_and_log('iteration %d min score %f on, global min %f, global iter %d, max pheromone %f, min pheromone %f' % 
+              (iter_idx, cycle_min_ant_score, self.global_min_score, self.global_min_iter, self.max_pheromone, self.min_pheromone))
 
             for machine_id, machine_running_res in cycle_min_ant_dispatch_dict.items():
                 if (machine_id not in self.machine_item_pheromone):
                     self.machine_item_pheromone[machine_id] = {}
 
+                # 每次迭代都会导致信息素挥发并叠加， 限制在 [min, max] 范围内
                 for inst_id in machine_running_res.running_inst_list:
                     if (inst_id  in self.machine_item_pheromone[machine_id]):
-                        self.machine_item_pheromone[machine_id][inst_id] = \
-                            (1 - self.evaporating_rate) * self.machine_item_pheromone[machine_id][inst_id] + 10000 / cycle_min_ant_score
+                        pheromone = (1 - self.evaporating_rate) * self.machine_item_pheromone[machine_id][inst_id] + 1 / self.global_min_score
+                        if (pheromone > self.max_pheromone):
+                            pheromone = self.max_pheromone
+                        elif (pheromone < self.min_pheromone):
+                            pheromone = self.min_pheromone
+
+                        self.machine_item_pheromone[machine_id][inst_id] = pheromone
                     else:
-                        self.machine_item_pheromone[machine_id][inst_id] = self.cur_def_pheromone + 10000 / cycle_min_ant_score
+                        self.machine_item_pheromone[machine_id][inst_id] = 1 / self.global_min_score
         return
 
     def output_submition(self):

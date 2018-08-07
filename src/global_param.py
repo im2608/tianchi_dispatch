@@ -64,7 +64,7 @@ def does_prefer_small_machine(app_res):
 
         return False
 
-data_set = 'a'
+data_set = 'b'
 
 ALPHA = 1.0 #启发因子，信息素的重要程度
 BETA = 2.0  #期望因子
