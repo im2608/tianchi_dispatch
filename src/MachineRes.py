@@ -43,21 +43,6 @@ class MachineRes(object):
 
        
     def update_machine_res(self, app_res, ratio):
-#         self.mem_slice += ratio * app_res.mem_slice
-#         self.cpu_slice += ratio * app_res.cpu_slice
-# 
-#         # slice 由于误差可能不会为0， 这里凡是 < 0.001 的slice 都设置成0
-#         self.cpu_slice = np.where(np.less(self.cpu_slice, 0.001), 0, self.cpu_slice)
-#         self.mem_slice = np.where(np.less(self.mem_slice, 0.001), 0, self.mem_slice)
-# 
-#         self.disk += ratio * app_res.disk
-#         self.p += ratio * app_res.p
-#         self.m += ratio * app_res.m
-#         self.pm += ratio * app_res.pm
-#         
-#         self.res_vector = np.hstack((self.cpu_slice, self.mem_slice, self.disk, self.p, self.m, self.pm))
-#         
-#         self.cpu_percentage = self.cpu_slice.max() / self.cpu
 
         self.res_vector += ratio * app_res.res_vector
 
@@ -74,13 +59,6 @@ class MachineRes(object):
     # 机器资源是否能够容纳 inst
     def meet_inst_res_require(self, app_res):
         return np.all(self.res_vector >= app_res.res_vector)
-#         return (np.all(self.cpu_slice >= app_res.cpu_slice) and  
-#                 np.all(self.mem_slice >= app_res.mem_slice) and
-#                 self.disk >= app_res.disk and
-#                 self.p >= app_res.p and
-#                 self.m >= app_res.m  and
-#                 self.pm >= app_res.pm)
-
         
     @staticmethod
     def sum_machine_remaining_res(sorted_machine_res):

@@ -6,6 +6,7 @@ Created on Jul 20, 2018
 import logging
 import csv
 import os
+import shutil
 import datetime
 import json
 import subprocess  
@@ -14,6 +15,7 @@ import copy
 from global_param import *
 from MachineRunningInfo import *
 from Ant import *
+
 
 # Ant Colony System
 class ACS(object):
@@ -79,8 +81,8 @@ class ACS(object):
 #             self.machine_item_pheromone['def'] = self.cur_def_pheromone
             
 
-    def submiteOneSubProcess(self, iter_idx, ant_number, runningSubProcesses):
-        cmdLine = "python Ant.py iter=%d number=%d" % (iter_idx, ant_number)
+    def submiteOneSubProcess(self, iter_idx, ant_number, start, runningSubProcesses):
+        cmdLine = "python Ant.py iter=%d number=%d start=%d" % (iter_idx, ant_number, start)
         sub = subprocess.Popen(cmdLine, shell=True)
         runningSubProcesses[(ant_number, time.time())] = sub
         print_and_log("running cmd line: %s" % cmdLine)
@@ -147,16 +149,23 @@ class ACS(object):
     def ant_search(self):
         ant_cnt = 18
         iteration_cnt = 100
-
-        for iter_idx in range(iteration_cnt):
+        no_promote_iter = 0
+        max_no_promote_iter = 2  
+        iter_idx = 0    
+        inst_start = 0 
+        
+        total_inst = len(self.inst_app_dict)
+        
+        while (iter_idx < iteration_cnt and inst_start < total_inst):
+#         for iter_idx in range(iteration_cnt):
 
             runningSubProcesses = {}
-            
+
             self.dump_pheromone()
- 
+
             for ant_number in range(ant_cnt):
-                self.submiteOneSubProcess(iter_idx, ant_number, runningSubProcesses)
-   
+                self.submiteOneSubProcess(iter_idx, ant_number, inst_start, runningSubProcesses)
+
             while True:
                 if (len(runningSubProcesses) == 0):
                     print_and_log("iter %d, All of ant finished" % (iter_idx))
@@ -177,36 +186,48 @@ class ACS(object):
                     cycle_min_ant_dispatch_dict = ant_machine_runing_info_dict
                     cycle_min_ant_number = ant_number
 
-            # 用本次迭代 得分最低的蚂蚁的分配方案来更新信息素， 这样可以使更多的解元素有机会获得信息素的增强，
-            # 避免陷入较差解的风险
             if (cycle_min_ant_score < self.global_min_score):
                 self.global_min_score = cycle_min_ant_score
                 self.global_min_iter = iter_idx
                 self.global_min_ant = cycle_min_ant_number
+                no_promote_iter = 0
+            else:
+                no_promote_iter += 1
+                
+            if (no_promote_iter < max_no_promote_iter):
+                self.max_pheromone = 1 / (self.global_min_score * (1 - self.evaporating_rate))
+                self.min_pheromone = 0.5 * self.max_pheromone
+                print_and_log('iteration %d min score %f on, global min score %f, global min iter %d, max pheromone %f, min pheromone %f, no promote iter %d' % 
+                  (iter_idx, cycle_min_ant_score, self.global_min_score, self.global_min_iter, self.max_pheromone, self.min_pheromone, no_promote_iter))
+    
+                for machine_id, machine_running_res in cycle_min_ant_dispatch_dict.items():
+                    if (machine_id not in self.machine_item_pheromone):
+                        self.machine_item_pheromone[machine_id] = {}
+    
+                    # 每次迭代都会导致信息素挥发并叠加， 限制在 [min, max] 范围内
+                    for inst_id in machine_running_res.running_inst_list:
+                        if (inst_id  in self.machine_item_pheromone[machine_id]):
+                            pheromone = (1 - self.evaporating_rate) * self.machine_item_pheromone[machine_id][inst_id] + 1 / self.global_min_score
+                            if (pheromone > self.max_pheromone):
+                                pheromone = self.max_pheromone
+                            elif (pheromone < self.min_pheromone):
+                                pheromone = self.min_pheromone
+    
+                            self.machine_item_pheromone[machine_id][inst_id] = pheromone
+                        else:
+                            self.machine_item_pheromone[machine_id][inst_id] = 1 / self.global_min_score
+            else:
+                inst_start += int(total_inst / 100)
+                global_min_ant_file = r'%s\..\output\%s\iter_%d_ant_%d.csv' % (runningPath, data_set, self.global_min_iter, self.global_min_ant)
+                inited_filename = r'%s\..\input\%s\feasible_solution_ant.csv' % (runningPath, data_set)
+                print_and_log("Ants have not prompted for %d iterations, move forward to %d, copy %s to %s" %
+                              (no_promote_iter, inst_start, global_min_ant_file, inited_filename))
+                shutil.copy(global_min_ant_file, inited_filename)
+                self.machine_item_pheromone.clear()
+                no_promote_iter = 0
+                iter_idx = 0
 
-#             self.cur_def_pheromone *= 1 - self.evaporating_rate # 每次迭代都会导致信息素挥发
-#             self.machine_item_pheromone['def'] = self.cur_def_pheromone
-            self.max_pheromone = 1 / (self.global_min_score * (1 - self.evaporating_rate))
-            self.min_pheromone = 0.5 * self.max_pheromone
-            print_and_log('iteration %d min score %f on, global min %f, global iter %d, max pheromone %f, min pheromone %f' % 
-              (iter_idx, cycle_min_ant_score, self.global_min_score, self.global_min_iter, self.max_pheromone, self.min_pheromone))
-
-            for machine_id, machine_running_res in cycle_min_ant_dispatch_dict.items():
-                if (machine_id not in self.machine_item_pheromone):
-                    self.machine_item_pheromone[machine_id] = {}
-
-                # 每次迭代都会导致信息素挥发并叠加， 限制在 [min, max] 范围内
-                for inst_id in machine_running_res.running_inst_list:
-                    if (inst_id  in self.machine_item_pheromone[machine_id]):
-                        pheromone = (1 - self.evaporating_rate) * self.machine_item_pheromone[machine_id][inst_id] + 1 / self.global_min_score
-                        if (pheromone > self.max_pheromone):
-                            pheromone = self.max_pheromone
-                        elif (pheromone < self.min_pheromone):
-                            pheromone = self.min_pheromone
-
-                        self.machine_item_pheromone[machine_id][inst_id] = pheromone
-                    else:
-                        self.machine_item_pheromone[machine_id][inst_id] = 1 / self.global_min_score
+            iter_idx += 1
         return
 
     def output_submition(self):

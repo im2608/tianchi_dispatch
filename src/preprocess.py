@@ -5,6 +5,8 @@ Created on Jul 18, 2018
 '''
 from global_param import *
 import csv
+from contextlib import contextmanager
+import contextlib
 
 def app_classification():
 
@@ -51,7 +53,25 @@ def corss_big_small_machine():
         
     output_file.close()
          
-         
+@contextmanager
+def mytimer():
+    s = time.time()
+    yield()
+    e = time.time()
+    return e-s
+
+    
+from multiprocessing import Process
+import os    
+def func_a(a, b):
+    print('a is ', a, ' b is ', b, ' form pid %d, ppid %d' % (os.getpid(), os.getppid()))
+    
+h = {1:2, 2:3, 3:4}    
+def test_mp():    
+    p = Process(target = func_a, args=(1, h))
+    p.start() 
+    
+    print('main end from pid ', os.getpid())
     
 if __name__ == '__main__':
-    app_classification()
+    test_mp()

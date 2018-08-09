@@ -16,9 +16,10 @@ import json
 from sklearn.utils import shuffle
 
 class Ant(object):
-    def __init__(self, iter_idx, ant_number):
+    def __init__(self, iter_idx, ant_number, inst_start):
         self.iter_idx = iter_idx
         self.ant_number = ant_number
+        self.inst_start = inst_start
         
         log_file = r'%s\..\log\iter_%d_ant_%d.txt' % (runningPath, iter_idx, ant_number)
 
@@ -82,7 +83,11 @@ class Ant(object):
         self.load_pheromone()
 
         # 加载一个可行解，在它的基础上进行优化, 并根据可行解来更新信息素
-        inited_filename = r'%s\..\input\%s\feasible_solution.csv' % (runningPath, data_set)
+        if (self.inst_start == 0):
+            inited_filename = r'%s\..\input\%s\feasible_solution.csv' % (runningPath, data_set)
+        else:
+            inited_filename = r'%s\..\input\%s\feasible_solution_ant.csv' % (runningPath, data_set)
+
         print(getCurrentTime(), 'loading a solution %s' % inited_filename)
 
         inst_disp_csv = csv.reader(open(inited_filename, 'r'))
@@ -92,7 +97,8 @@ class Ant(object):
 
             app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
             if (not self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
-                print_and_log("ERROR! Ant(%d, %d) Failed to immigrate inst %d to machine %d" % (self.iter_idx, self.ant_number, inst_id, machine_id))
+                print_and_log("ERROR! Ant(%d, %d, %d) Failed to immigrate inst %d to machine %d" % 
+                              (self.iter_idx, self.ant_number, self.inst_start, inst_id, machine_id))
                 exit(-1)
 
             str_machine_id = str(machine_id)
@@ -120,6 +126,13 @@ class Ant(object):
                 self.machine_item_pheromone[str_machine_id][str_inst_id] = self.cur_def_pheromone 
 
 #             self.machine_item_pheromone[str_machine_id][str_inst_id] = self.cur_def_pheromone + 10000 / 7500
+
+        print(getCurrentTime(), 'calculate_migrating_delta_score()..')
+        machine_id_list = [i for i in range(1, MACHINE_CNT + 1)]
+        for machine_id in machine_id_list:
+            self.machine_runing_info_dict[machine_id].calculate_migrating_delta_score(self.app_res_dict)
+
+        print(getCurrentTime(), 'init() done..')
 
 
     def get_immigratable_machine_ex(self, inst_id, skipped_machine_id):
@@ -173,162 +186,11 @@ class Ant(object):
                     
         return immigratable_machine_list
     
-    def adj_dispatch_dp(self):
-        print_and_log('Ant(%d, %d) adj_dispatch_dp' % (self.iter_idx, self.ant_number))
-
-        machine_start_idx = 0
-        
-        next_cost = self.sum_scores_of_machine()
-        
-        self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key=lambda d:d[1].get_machine_score(), reverse=False)
-
-        while (machine_start_idx < MACHINE_CNT):
-            if (machine_start_idx % 100 == 0):
-                print(getCurrentTime(), 'Ant(%d, %d) adj_dispatch_ex handled %d machines\r' % 
-                      (self.iter_idx, self.ant_number, machine_start_idx), end='')
-
-            machine_id = self.sorted_machine_res[machine_start_idx][0]
-
-            heavest_load_machine = self.machine_runing_info_dict[machine_id]
-            
-            if (len(heavest_load_machine.running_inst_list) == 0):
-                machine_start_idx += 1
-                continue
-
-            inst_id = heavest_load_machine.running_inst_list[0]
-
-            app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
-
-            # 生成迁移方案的第一步， 以及迁入后增加的分数
-            dp_immigrating_solution_list = self.get_immigratable_machine_ex(inst_id, machine_id)
-            print(getCurrentTime(), 'Ant(%d, %d) machine %d, 1st / %d step solution is %d' % 
-                  (self.iter_idx, self.ant_number, machine_id, len(heavest_load_machine.running_inst_list), len(dp_immigrating_solution_list)))
-            
-            if (len(dp_immigrating_solution_list) == 0):
-                machine_start_idx += 1
-                continue
-            # 生成第 2 -> N 步的迁移方案
-            for inst_idx in range(1, len(heavest_load_machine.running_inst_list)):
-                print(getCurrentTime(), 'Ant(%d, %d) searching machine %d %d/%d\r' % 
-                      (self.iter_idx, self.ant_number, machine_id, inst_idx,  len(heavest_load_machine.running_inst_list)), end='')
-                each_inst = heavest_load_machine.running_inst_list[inst_idx]
-                app_res = self.app_res_dict[self.inst_app_dict[each_inst]]
-
-                one_step_solution = self.get_immigratable_machine_ex(each_inst, machine_id)
-                dp_immigrating_solution_list = self.merge_migration_solution(dp_immigrating_solution_list, 
-                                                                             one_step_solution,
-                                                                             heavest_load_machine.get_machine_real_score())
-                print(getCurrentTime(), 'Ant(%d, %d) machine %d, %d step solution is %d' % 
-                      (self.iter_idx, self.ant_number, machine_id, inst_idx + 1, len(dp_immigrating_solution_list)))
-                if (len(dp_immigrating_solution_list) == 0):                    
-                    break
-
-            # 在所有的迁移方案中找到迁入分数最小的
-            min_solution_score = 1e9
-            for idx, each_solution in enumerate(dp_immigrating_solution_list):
-                if (each_solution[1] < min_solution_score):
-                    min_solution_score = each_solution[1]
-                    min_solution_idx = idx
-
-            # 迁入所增加的分数至少要减少 1 分 , 否则不用再继续尝试
-            if (heavest_load_machine.get_machine_real_score() - min_solution_score <= 1):
-                print_and_log('Ant(%d, %d) migrating %s, running len %d, increased score %f > (real score %f), continue...' % \
-                              (self.iter_idx, self.ant_number, heavest_load_machine.machine_res.machine_id, len(heavest_load_machine.running_inst_list), 
-                               min_solution_score, heavest_load_machine.get_machine_real_score()))
-
-                machine_start_idx += 1
-                continue
-
-            print_and_log('Ant(%d, %d) migrating solution for machine : %d, real score %f, increased %f, delta score %f, %s' % \
-                          (self.iter_idx, self.ant_number, machine_id, heavest_load_machine.get_machine_real_score(), min_solution_score,
-                           heavest_load_machine.get_machine_real_score() - min_solution_score, 
-                           dp_immigrating_solution_list[min_solution_idx]))
-            # 迁入
-            for immigrating_machine, inst_list in dp_immigrating_solution_list[min_solution_idx][0].items():
-                for each_inst in inst_list:
-                    app_res = self.app_res_dict[self.inst_app_dict[each_inst]]
-    
-                    # 迁入
-                    if (not self.machine_runing_info_dict[immigrating_machine].dispatch_app(each_inst, app_res, self.app_constraint_dict)):
-                        print_and_log("Ant(%d, %d) ERROR! Failed to immigrate inst %d to machine %d" % 
-                                      (self.iter_idx, self.ant_number, each_inst, immigrating_machine))
-                        return
-                    
-                    self.migrating_list.append('inst_%d,machine_%d' % (each_inst, immigrating_machine))
-            
-                    heavest_load_machine.release_app(each_inst, app_res) # 迁出 inst
-
-            self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), \
-                                         key = lambda d : d[1].get_machine_real_score(), reverse = True) # 排序
-            # 迁移之后重新计算得分, 仍然从可迁移的且得分最高的机器开始
-            next_cost = self.sum_scores_of_machine()   
-
-        print_and_log('Ant(%d, %d) leaving adj_dispatch_ex with next cost %f' % (self.iter_idx, self.ant_number, next_cost))
-        return next_cost
-    
-    # 将前 n-1 步的迁移方案与第 n 步的合并
-    # 每个方案的格式为：  [{machine_id:[inst list], machine_id:[inst list], ...}, immigrating score]
-    def merge_migration_solution(self, current_solution, one_step_solution, machine_real_score):
-        one_step_len = len(one_step_solution)
-        current_len = len(current_solution)
-        total = len(current_solution) * len(one_step_solution)
-        print_and_log('merge_migration_solution, possible steps %d (%d/%d)' % (total, current_len, one_step_len))
-        migration_solution = []
-        solution_scores_list = []
-        idx = 0
-        for each_current in current_solution:
-            if (idx % 1000 == 0):
-                print(getCurrentTime(), '%d / %d handle\r' % (idx, total), end='')
-
-            if (each_current[1] >= machine_real_score):
-                idx += one_step_len
-                continue
-
-            for one_step in one_step_solution:
-                if (one_step[1] >= machine_real_score):
-                    idx += 1
-                    continue
-                
-                each_current_tmp = copy.deepcopy(each_current)
-            
-                for immigrating_machine_id in one_step[0].keys():  # 这里只有 1 个 key
-                    idx += 1
-
-                    # one step 中要迁入的 machine 没有出现在前 n-1 步中, 直接加入到当前的迁移方案中
-                    if (immigrating_machine_id not in each_current_tmp[0]):
-                        each_current_tmp[0][immigrating_machine_id] = one_step[0][immigrating_machine_id]
-                        each_current_tmp[1] = round(each_current_tmp[1] + one_step[1], 2)
-                    else:  # one step 中要迁入的 machine 已经出现在前 n-1 步中， 需要判断是否能够继续迁入
-                        inst_list = each_current_tmp[0][immigrating_machine_id] + one_step[0][immigrating_machine_id]
-                        immigrating_machine_res = self.machine_runing_info_dict[immigrating_machine_id] 
-                        if (not immigrating_machine_res.can_dispatch_ex(inst_list, self.inst_app_dict, self.app_res_dict, self.app_constraint_dict)):
-                            continue
-
-                        # 当前迁入列表所增加的分数
-                        tmp_app_res = AppRes.sum_app_res_by_inst(each_current_tmp[0][immigrating_machine_id], self.inst_app_dict, self.app_res_dict)
-                        cur_delta_score = immigrating_machine_res.immigrating_delta_score(tmp_app_res)
-
-                        # 继续迁入 inst 所增加的分数
-                        tmp_app_res = AppRes.sum_app_res_by_inst(inst_list, self.inst_app_dict, self.app_res_dict)
-                        delta_score = immigrating_machine_res.immigrating_delta_score(tmp_app_res)
-
-                        # 两者的差就是继续迁入 inst 后，该方案所增加的分数
-                        each_current_tmp[1] = round(each_current_tmp[1] + delta_score - cur_delta_score, 2)
-                        each_current_tmp[0][immigrating_machine_id].extend(one_step[0][immigrating_machine_id])
-
-                        if (each_current_tmp[1] >= machine_real_score):
-                            continue
-                        
-                    appended, solution_scores_list = append_score_by_score_diff(solution_scores_list, each_current_tmp[1])
-                    if (appended):
-                        migration_solution.append(each_current_tmp)
-
-        return migration_solution
     
     def dispatch_inst(self):
         total_inst = len(self.dispatchable_inst_list)
         
-        total_inst = int(total_inst / 100)        
+#         total_inst = int(total_inst / 100)        
 #         self.dispatchable_inst_list = shuffle(self.dispatchable_inst_list[0:total_inst])
         
         part1_time = 0        
@@ -341,9 +203,8 @@ class Ant(object):
         part_can = 0
         
         machine_id_list = [i for i in range(1, MACHINE_CNT + 1)]
-#         machine_id_list = shuffle(machine_id_list)
-        
-        for i in range(total_inst):
+        inst_end = self.inst_start + int(total_inst / 100)
+        for i in range(self.inst_start, inst_end):
             inst_id = self.dispatchable_inst_list[i]            
             str_inst_id = str(inst_id)
 
@@ -355,24 +216,20 @@ class Ant(object):
             start_time = time.time()
             
             for machine_id in machine_id_list:
-                part11_s = time.time()
+                
                 machine_running_res = self.machine_runing_info_dict[machine_id]
                 if (machine_id == self.inst_running_machine_dict[inst_id]): 
                     continue
-                
-                part11_e = time.time()
-                part11_time += part11_e - part11_s
 
-                part12_s = time.time()
                 # cpu 均值相近的机器启发式信息也相近，这里只保留 cpu 均值有一定距离的机器
                 idx = machine_running_res.get_cpu_mean_idx()
-                
-                part12_e = time.time()
-                part12_time += part12_e - part12_s
-                
+
                 migrating_delta_score = 1e9
                 if (inst_id in self.inst_running_machine_dict):
+                    part11_s = time.time()
                     migrating_delta_score = self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].migrating_delta_score(app_res)
+                    part11_e = time.time()
+                    part11_time += part11_e - part11_s
 
                 if (cpu_mean_group_list[idx] == 0):
                     can_s = time.time()
@@ -380,7 +237,11 @@ class Ant(object):
                     can_e = time.time()
                     part_can += can_e - can_s
                     if (can):
+                        part12_s = time.time()
                         immigrate_deleta_score = machine_running_res.immigrating_delta_score(app_res)
+                        part12_e = time.time()
+                        part12_time += part12_e - part12_s
+
                         if (migrating_delta_score > immigrate_deleta_score):
                             heuristic = round(machine_running_res.get_heuristic(app_res), 2)
                             machine_heuristic_dict[machine_id] = heuristic
@@ -444,22 +305,23 @@ class Ant(object):
 
             if (self.machine_runing_info_dict[selected_machine].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
                 if (inst_id in self.inst_running_machine_dict):
-                    self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].release_app(inst_id, app_res)
+                    immigrating_machine_res = self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]] 
+                    immigrating_machine_res.release_app(inst_id, app_res)
+                    immigrating_machine_res.calculate_migrating_delta_score(self.app_res_dict)
 
                 self.inst_running_machine_dict[inst_id] = selected_machine
                 self.migrating_list.append('inst_%d,machine_%d' % (inst_id, selected_machine))
             else:
                 print_and_log("ERROR! dispatch_inst() Failed to immigrate inst %d to machine %d" % (inst_id, selected_machine))
                 exit(-1)
-            
+
             end23_time = time.time()
             part23_time += end23_time - end22_time
 
             if (i % 100 == 0):
-                print(getCurrentTime(), "Ant(%d, %d) %d / %d inst handled, part1 %d, part11 %d, part12 %d, part21 %d, part22 %d, part23 %d, part_can %d \r" % \
-                      (self.iter_idx, self.ant_number, i, total_inst, part1_time, part11_time, part12_time,
+                print(getCurrentTime(), "Ant(%d, %d, %d) %d / %d inst handled, part1 %d, part11 %d, part12 %d, part21 %d, part22 %d, part23 %d, part_can %d \r" % \
+                      (self.iter_idx, self.ant_number, self.inst_start, i, inst_end, part1_time, part11_time, part12_time,
                        part21_time, part22_time, part23_time, part_can), end='')
-
         return 
     
     def sum_scores_of_machine(self):
@@ -536,8 +398,9 @@ if __name__ == '__main__':
     
     iter_idx = int(sys.argv[1].split("=")[1])
     ant_number = int(sys.argv[2].split("=")[1])
+    inst_start = int(sys.argv[3].split("=")[1])
     
-    ant = Ant(iter_idx, ant_number)  
+    ant = Ant(iter_idx, ant_number, inst_start)  
     ant.dispatch_inst()
     ant.output_ant_solution()
     

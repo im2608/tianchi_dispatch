@@ -14,6 +14,17 @@ class MachineRunningInfo(object):
         self.machine_res = MachineRes(each_machine) # 机器的资源
         self.running_inst_list = []
         self.running_app_dict = {}
+        
+        # 每个 app 迁出后所减少的分数
+        self.migrating_delta_score_dict = {}
+        return
+
+    def calculate_migrating_delta_score(self, app_res_dict):
+        for app_id in self.running_app_dict.keys():
+            app_res = app_res_dict[app_id]
+            tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
+            score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+            self.migrating_delta_score_dict[app_id] = self.get_machine_real_score() - score
         return
     
     # 得到启发式信息: 1 / 剩余 cpu 的均值
@@ -191,10 +202,12 @@ class MachineRunningInfo(object):
     
     # 将 app 迁出后所减少的分数
     def migrating_delta_score(self, app_res):
-        tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
-        
-        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
-        return self.get_machine_real_score() - score
+        return self.migrating_delta_score_dict[app_res.app_id]
+
+#         tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
+#         
+#         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+#         return self.get_machine_real_score() - score
     
 
     # 将 app 迁出后的分数
