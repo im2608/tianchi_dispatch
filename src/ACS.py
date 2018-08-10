@@ -1,3 +1,4 @@
+#coding=utf-8
 '''
 Created on Jul 20, 2018
 
@@ -29,7 +30,7 @@ class ACS(object):
         self.global_min_ant_score = 1e9
         self.global_min_ant_migration_list = []
         
-        log_file = r'%s\..\log\ACS.log' % (runningPath)
+        log_file = r'%s/../log/ACS.log' % (runningPath)
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
@@ -39,13 +40,13 @@ class ACS(object):
         
         print(getCurrentTime(), 'loading app_resources.csv...')
         self.app_res_dict = [0 for x in range(APP_CNT + 1)]
-        app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
+        app_res_csv = csv.reader(open(r'%s/../input/%s/app_resources.csv' % (runningPath, data_set), 'r'))
         for each_app in app_res_csv:
             app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
             
-#         machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources_reverse.csv' % (runningPath, data_set), 'r'))
-        machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources.csv' % (runningPath, data_set), 'r'))
+#         machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources_reverse.csv' % (runningPath, data_set), 'r'))
+        machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.csv' % (runningPath, data_set), 'r'))
         
         self.machine_runing_info_dict = {}
         for each_machine in machine_res_csv:
@@ -56,7 +57,7 @@ class ACS(object):
         print(getCurrentTime(), 'loading instance_deploy.csv...')
         self.inst_running_machine_dict = {}
         self.inst_app_dict = {}
-        inst_app_csv = csv.reader(open(r'%s\..\input\%s\instance_deploy.csv' % (runningPath, data_set), 'r'))
+        inst_app_csv = csv.reader(open(r'%s/../input/%s/instance_deploy.csv' % (runningPath, data_set), 'r'))
         for each_inst in inst_app_csv:
             inst_id = int(each_inst[0])
             app_id = int(each_inst[1])
@@ -72,7 +73,7 @@ class ACS(object):
         self.global_min_score = 1e9
         
         self.machine_item_pheromone = {}
-#         pheromone_file = r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set)
+#         pheromone_file = r'%s/../input/%s/machine_item_pheromone.txt' % (runningPath, data_set)
 #         if (os.path.exists(pheromone_file)):
 #             with open(pheromone_file, 'r') as pheromone_file:
 #                 self.machine_item_pheromone = json.load(pheromone_file)  
@@ -107,7 +108,7 @@ class ACS(object):
     
     # 在不解决约束冲突的基础上加载 Ant 的输出， Ant 会解决约束冲突 
     def dispatch_inst(self, iter_idx, ant_number):
-        ant_output_filename = r'%s\..\output\%s\iter_%d_ant_%d.csv' % (runningPath, data_set, iter_idx, ant_number)
+        ant_output_filename = r'%s/../output/%s/iter_%d_ant_%d.csv' % (runningPath, data_set, iter_idx, ant_number)
         print(getCurrentTime(), 'loading ', ant_output_filename)
 
         ant_machine_runing_info_dict = copy.deepcopy(self.machine_runing_info_dict)
@@ -137,7 +138,7 @@ class ACS(object):
         if (len(self.machine_item_pheromone) == 0):
             return
 
-        with open(r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set), 'w') as pheromone_file:
+        with open(r'%s/../input/%s/machine_item_pheromone.txt' % (runningPath, data_set), 'w') as pheromone_file:
             for machine_id in range(1, MACHINE_CNT + 1):
                 if machine_id not in self.machine_item_pheromone:
                     continue
@@ -218,8 +219,8 @@ class ACS(object):
                             self.machine_item_pheromone[machine_id][inst_id] = 1 / self.global_min_score
             else:
                 inst_start += int(total_inst / 100)
-                global_min_ant_file = r'%s\..\output\%s\iter_%d_ant_%d.csv' % (runningPath, data_set, self.global_min_iter, self.global_min_ant)
-                inited_filename = r'%s\..\input\%s\feasible_solution_ant.csv' % (runningPath, data_set)
+                global_min_ant_file = r'%s/../output/%s/iter_%d_ant_%d.csv' % (runningPath, data_set, self.global_min_iter, self.global_min_ant)
+                inited_filename = r'%s/../input/%s/feasible_solution_ant.csv' % (runningPath, data_set)
                 print_and_log("Ants have not prompted for %d iterations, move forward to %d, copy %s to %s" %
                               (no_promote_iter, inst_start, global_min_ant_file, inited_filename))
                 shutil.copy(global_min_ant_file, inited_filename)
@@ -233,7 +234,7 @@ class ACS(object):
     def output_submition(self):
         print_and_log("Global min iter %d, global min ant %d" % (self.global_min_iter, self.global_min_ant))
 #         filename = 'submit_%s.csv' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-#         output_file = open(r'%s\..\output\%s\%s' % (runningPath, data_set, filename), 'w')
+#         output_file = open(r'%s/../output/%s/%s' % (runningPath, data_set, filename), 'w')
 #         print(getCurrentTime(), 'writing output file %s' % filename)
 # 
 #         for each_migrating in self.migrating_list:

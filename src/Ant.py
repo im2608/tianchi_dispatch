@@ -1,3 +1,4 @@
+#coding=utf-8
 '''
 Created on Jul 19, 2018
 
@@ -21,7 +22,7 @@ class Ant(object):
         self.ant_number = ant_number
         self.inst_start = inst_start
         
-        log_file = r'%s\..\log\iter_%d_ant_%d.txt' % (runningPath, iter_idx, ant_number)
+        log_file = r'%s/../log/iter_%d_ant_%d.txt' % (runningPath, iter_idx, ant_number)
 
         self.print_all_scores = False
 
@@ -35,7 +36,7 @@ class Ant(object):
         print(getCurrentTime(), 'loading machine_resources.csv...')
         self.machine_runing_info_dict = {} 
 #         machine_res_csv = csv.reader(open(r'%s\..\input\machine_resources_reverse.csv' % runningPath, 'r'))
-        machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources.csv' % (runningPath, data_set), 'r'))
+        machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.csv' % (runningPath, data_set), 'r'))
 
         for each_machine in machine_res_csv:
             machine_id = int(each_machine[0])
@@ -43,14 +44,14 @@ class Ant(object):
 
         print(getCurrentTime(), 'loading app_resources.csv...')
         self.app_res_dict = [0 for x in range(APP_CNT + 1)]
-        app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
+        app_res_csv = csv.reader(open(r'%s/../input/%s/app_resources.csv' % (runningPath, data_set), 'r'))
         for each_app in app_res_csv:
             app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
 
         print(getCurrentTime(), 'loading app_interference.csv...')
         self.app_constraint_dict = {}
-        app_cons_csv = csv.reader(open(r'%s\..\input\%s\app_interference.csv' % (runningPath, data_set), 'r'))
+        app_cons_csv = csv.reader(open(r'%s/../input/%s/app_interference.csv' % (runningPath, data_set), 'r'))
         for each_cons in app_cons_csv:
             app_id_a = int(each_cons[0])
             app_id_b = int(each_cons[1])
@@ -64,7 +65,7 @@ class Ant(object):
         print(getCurrentTime(), 'loading instance_deploy.csv...')
         self.inst_app_dict = {}
         self.dispatchable_inst_list = []
-        inst_app_csv = csv.reader(open(r'%s\..\input\%s\instance_deploy.csv' % (runningPath, data_set), 'r'))
+        inst_app_csv = csv.reader(open(r'%s/../input/%s/instance_deploy.csv' % (runningPath, data_set), 'r'))
         for each_inst in inst_app_csv:
             inst_id = int(each_inst[0])
             app_id = int(each_inst[1])
@@ -84,9 +85,9 @@ class Ant(object):
 
         # 加载一个可行解，在它的基础上进行优化, 并根据可行解来更新信息素
         if (self.inst_start == 0):
-            inited_filename = r'%s\..\input\%s\feasible_solution.csv' % (runningPath, data_set)
+            inited_filename = r'%s/../input/%s/feasible_solution.csv' % (runningPath, data_set)
         else:
-            inited_filename = r'%s\..\input\%s\feasible_solution_ant.csv' % (runningPath, data_set)
+            inited_filename = r'%s/../input/%s/feasible_solution_ant.csv' % (runningPath, data_set)
 
         print(getCurrentTime(), 'loading a solution %s' % inited_filename)
 
@@ -227,7 +228,7 @@ class Ant(object):
                 migrating_delta_score = 1e9
                 if (inst_id in self.inst_running_machine_dict):
                     part11_s = time.time()
-                    migrating_delta_score = self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].migrating_delta_score(app_res)
+                    migrating_delta_score = self.machine_runing_info_dict[self.inst_running_machine_dict[inst_id]].migrating_delta_score_ex(app_res)
                     part11_e = time.time()
                     part11_time += part11_e - part11_s
 
@@ -352,7 +353,7 @@ class Ant(object):
     def load_pheromone(self):
         self.cur_def_pheromone = 1 / 7280
         self.machine_item_pheromone = {}
-        pheromone_file_name = r'%s\..\input\%s\machine_item_pheromone.txt' % (runningPath, data_set)
+        pheromone_file_name = r'%s/../input/%s/machine_item_pheromone.txt' % (runningPath, data_set)
         print(getCurrentTime(), 'loading machine_item_pheromone')
         if (os.path.exists(pheromone_file_name)):
             with open(pheromone_file_name , 'r') as pheromone_file:
@@ -370,7 +371,7 @@ class Ant(object):
 
     def output_ant_solution(self):
         filename = 'iter_%d_ant_%d.csv' % (self.iter_idx, self.ant_number)
-        output_file = open(r'%s\..\output\%s\%s' % (runningPath, data_set, filename), 'w')
+        output_file = open(r'%s/../output/%s/%s' % (runningPath, data_set, filename), 'w')
         print(getCurrentTime(), 'writing output file %s' % filename)
 
         for each_migrating in self.migrating_list:

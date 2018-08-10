@@ -1,3 +1,4 @@
+#coding=utf-8
 '''
 Created on Jun 25, 2018
 
@@ -201,13 +202,14 @@ class MachineRunningInfo(object):
         return False
     
     # 将 app 迁出后所减少的分数
-    def migrating_delta_score(self, app_res):
+    def migrating_delta_score_ex(self, app_res):
         return self.migrating_delta_score_dict[app_res.app_id]
 
-#         tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
-#         
-#         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
-#         return self.get_machine_real_score() - score
+    def migrating_delta_score(self, app_res):
+        tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
+         
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        return self.get_machine_real_score() - score
     
 
     # 将 app 迁出后的分数

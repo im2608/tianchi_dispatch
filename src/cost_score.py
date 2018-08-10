@@ -1,3 +1,4 @@
+#coding=utf-8
 '''
 Created on Jun 29, 2018
 
@@ -12,7 +13,8 @@ import math
 import logging
 import copy
 import datetime
-
+import multiprocessing
+import os
 # from functools import reduce
 
 class AdjustDispatch(object):
@@ -20,21 +22,21 @@ class AdjustDispatch(object):
         
         self.machine_runing_info_dict = {} 
         print(getCurrentTime(), 'loading machine_resources.csv')
-        machine_res_csv = csv.reader(open(r'%s\..\input\%s\machine_resources.csv' % (runningPath, data_set), 'r'))
+        machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.csv' % (runningPath, data_set), 'r'))
         for each_machine in machine_res_csv:
             machine_id = int(each_machine[0])
             self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
         
         print(getCurrentTime(), 'loading app_resources.csv')
         self.app_res_dict = {}
-        app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
+        app_res_csv = csv.reader(open(r'%s/../input/%s/app_resources.csv' % (runningPath, data_set), 'r'))
         for each_app in app_res_csv:
             app_id = int(each_app[0])
             self.app_res_dict[app_id] = AppRes(each_app)
 
         print(getCurrentTime(), 'loading app_interference.csv')
         self.app_constraint_dict = {}
-        app_cons_csv = csv.reader(open(r'%s\..\input\%s\app_interference.csv' % (runningPath, data_set), 'r'))
+        app_cons_csv = csv.reader(open(r'%s/../input/%s/app_interference.csv' % (runningPath, data_set), 'r'))
         for each_cons in app_cons_csv:
             app_id_a = int(each_cons[0])
             app_id_b = int(each_cons[1])
@@ -44,16 +46,15 @@ class AdjustDispatch(object):
             self.app_constraint_dict[app_id_a][app_id_b] = int(each_cons[2])
 
         self.cost = 0
-        
+
         if (data_set == 'a'):
-            self.submit_filename = 'submit_20180712_113242_optimized_5877'
+            self.submit_filename = 'a_5749'
         else:
-            self.submit_filename = 'submit_20180727_175925_optimized_7434'
-        
-        
+            self.submit_filename = 'b_7064'
+
         time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
-        log_file = r'%s\..\log\cost_%s_%s_%s.log' % (runningPath, data_set, self.submit_filename, time_now)
+        log_file = r'%s/../log/cost_%s_%s_%s.log' % (runningPath, data_set, self.submit_filename, time_now)
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
@@ -61,7 +62,7 @@ class AdjustDispatch(object):
                             filename=log_file,
                             filemode='w')
         
-        self.output_filename = r'%s\..\output\%s\%s_optimized_%s.csv' % (runningPath, data_set, self.submit_filename, time_now)        
+        self.output_filename = r'%s/../output/%s/%s_optimized_%s.csv' % (runningPath, data_set, self.submit_filename, time_now)        
         return
 
     def sorte_machine(self):
@@ -252,10 +253,44 @@ class AdjustDispatch(object):
         current_len = len(current_solution)
         total = len(current_solution) * len(one_step_solution)
         print_and_log('merge_migration_solution, possible steps %d (%d/%d)' % (total, current_len, one_step_len))
+
+        cpu_cnt = multiprocessing.cpu_count()
+        cur_solution_cnt = len(current_solution)
+        solutions_for_each_subprocess = cur_solution_cnt // cpu_cnt
+
+        main_print_once = True
+        is_main_process = True
+
+        subprocess_pid_set = set()
+        for subproce_idx in range(0, cpu_cnt):
+            solution_start = subproce_idx * solutions_for_each_subprocess
+            solution_end = solution_start + solutions_for_each_subprocess
+            if (subproce_idx == cpu_cnt - 1):  # last sub process handles with the rest solutions
+                solution_end = cur_solution_cnt
+
+            # 启动多个子进程，每个子进程处理一部分 merge
+            pid = os.fork()
+            if (pid != 0):  # main process
+                subprocess_pid_set.add(pid)
+                if (not main_print_once):
+                    solution_start = 0
+                    solution_end = 0 # main process does nothing
+                    pid = os.getpid()
+                    print(getCurrentTime(), 'main process %d started solution (%d, %d)' % (pid, solution_start, solution_end))
+                    main_print_once = True
+                    is_main_process = True
+            else:  # child process
+                is_main_process = False
+                pid = os.getpid()
+#                 print(getCurrentTime(), 'sub-process %d started solution (%d, %d)\r' % (pid, solution_start, solution_end), end='')
+                break  # sub process break
+
+        idx = solution_start
         migration_solution = []
         solution_scores_set = set()
-        idx = 0
-        for each_current in current_solution:
+
+        for solution_idx in range(solution_start, solution_end):
+            each_current = current_solution[solution_idx]        
             if (idx % 1000 == 0):
                 print(getCurrentTime(), '%d / %d handle\r' % (idx, total), end='')
 
@@ -300,6 +335,53 @@ class AdjustDispatch(object):
                         migration_solution.append(each_current_tmp)
                         solution_scores_set.add(each_current_tmp[1])
 
+        if (is_main_process):
+            # 主进程等待所有的子进程结束， 然后将 数据合并
+            finished_subprocess_set = set()
+            while (len(subprocess_pid_set) > 0):
+                try:
+                    pid, result = os.wait()
+                except:
+                    print(getCurrentTime(), 'result = os.wait() exception')
+                if (pid in subprocess_pid_set):
+                    subprocess_pid_set.remove(pid)
+                    finished_subprocess_set.add(pid)
+                    print(getCurrentTime(), 'child process %d ended, %d are running\r' % (pid, len(subprocess_pid_set)), end='')
+
+#                 time.sleep(1)
+
+            # all of sub processes finished, merge solutions here
+            solution_scores_set.clear()
+            for each_sub_pid in finished_subprocess_set:
+                sub_merge_file = r'%s/../output/%s/sub_merge_%d.csv' % (runningPath, data_set, each_sub_pid)
+                sub_merge_csv = csv.reader(open(sub_merge_file, 'r'))
+                for each_solution in sub_merge_csv:
+                    immigrating_dict = {}
+                    for each_migrating in each_solution[:-1]:
+                        tmp = each_migrating.split(":")
+                        immigrating_machine_id = int(tmp[0])
+                        immigrating_inst_list = list(map(int, tmp[1].split("|")))
+                        immigrating_dict[immigrating_machine_id] = immigrating_inst_list
+
+                    migrating_score = round(float(each_solution[-1]), 2)
+                    if (migrating_score not in solution_scores_set):
+                        migration_solution.append([immigrating_dict, migrating_score])
+                        solution_scores_set.add(migrating_score)
+                os.remove(sub_merge_file)
+        else:
+            # 子进程将迁移方案写入文件， 由主进程合并， 每行格式为       
+            # machine_id1:inst_1|inst_2,machine_id2:inst_3|inst_4,immigrating score
+            # 1：123|234，2：34|356，123.2243
+            with open(r'%s/../output/%s/sub_merge_%d.csv' % (runningPath, data_set, pid), 'w') as sub_merge_file:
+                for each_solution in migration_solution:
+                    to_string = ""
+                    for immigrating_machine_id, immigrating_inst_list in each_solution[0].items():
+                        to_string += '%d:%s,' % (immigrating_machine_id, "|".join(list(map(str, immigrating_inst_list))))
+
+                    sub_merge_file.write("%s%s\n" % (to_string, each_solution[1]))
+
+            exit(0)  # 子进程退出
+                
         return migration_solution
 
     def adj_dispatch_ex(self, max_score):
@@ -429,10 +511,11 @@ class AdjustDispatch(object):
                     best_migraring_solution = copy.deepcopy(each_solution)
             
             # 生成第 2 -> N 步的迁移方案
+            total_steps = len(heavest_load_machine.running_inst_list)
             for inst_idx in range(1, len(heavest_load_machine.running_inst_list)):
-                print(getCurrentTime(), 'searching machine %d %d/%d\r' % (machine_id, inst_idx,  len(heavest_load_machine.running_inst_list)), end='')
+                print(getCurrentTime(), 'searching machine %d %d/%d\r' % (machine_id, inst_idx, total_steps), end='')
                 each_inst = heavest_load_machine.running_inst_list[inst_idx]
-                
+
                 # 将 inst list 迁移出后所减少的分数
                 tmp_app = AppRes.sum_app_res_by_inst(heavest_load_machine.running_inst_list[:(inst_idx + 1)], self.inst_app_dict, self.app_res_dict)
                 migrating_delta_score = heavest_load_machine.migrating_delta_score(tmp_app)
@@ -442,7 +525,7 @@ class AdjustDispatch(object):
                 dp_immigrating_solution_list = self.merge_migration_solution(dp_immigrating_solution_list, one_step_solution,
                                                                              migrating_delta_score, best_migrating_score,
                                                                              heavest_load_machine.get_machine_real_score())
-                print(getCurrentTime(), 'machine %d, %d step solution is %d' % (machine_id, inst_idx + 1, len(dp_immigrating_solution_list)))
+                print(getCurrentTime(), 'machine %d, %d/%d step solution is %d ' % (machine_id, inst_idx + 1, total_steps, len(dp_immigrating_solution_list)))
                 if (len(dp_immigrating_solution_list) == 0):
                     break
 
@@ -454,14 +537,14 @@ class AdjustDispatch(object):
 
             # 迁入所增加的分数至少要减少 1 分 , 否则不用再继续尝试
             if (best_migrating_score < 1):
-                print_and_log('migrating %s, running len %d, migrating delta score %f > (real score %f), continue...' % \
+                print_and_log('migrating %s, running len %d, migrating delta score %f > (real score %f), continue... ' % \
                               (heavest_load_machine.machine_res.machine_id, len(heavest_load_machine.running_inst_list), 
                                best_migrating_score, heavest_load_machine.get_machine_real_score()))
 
 #                 machine_start_idx += 1
                 continue
 
-            print_and_log('migrating solution for machine : %d, real score %f, migrating delta score %f, %s' % \
+            print_and_log('migrating solution for machine : %d, real score %f, migrating delta score %f, %s ' % \
                           (machine_id, heavest_load_machine.get_machine_real_score(), best_migrating_score,
                            best_migraring_solution))
             # 迁入
@@ -473,7 +556,7 @@ class AdjustDispatch(object):
                     if (not self.machine_runing_info_dict[immigrating_machine].dispatch_app(each_inst, app_res, self.app_constraint_dict)):
                         print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (each_inst, immigrating_machine))
                         return
-                    
+
                     self.migrating_list.append('inst_%d,machine_%d' % (each_inst, immigrating_machine))
             
                     heavest_load_machine.release_app(each_inst, app_res) # 迁出 inst
@@ -568,7 +651,7 @@ class AdjustDispatch(object):
         print(getCurrentTime(), 'loading instance_deploy.csv...')
 
         self.inst_app_dict = {}
-        inst_app_csv = csv.reader(open(r'%s\..\input\%s\instance_deploy.csv' % (runningPath, data_set), 'r'))
+        inst_app_csv = csv.reader(open(r'%s/../input/%s/instance_deploy.csv' % (runningPath, data_set), 'r'))
         i = 0
         for each_inst in inst_app_csv:
             inst_id = int(each_inst[0])
@@ -579,11 +662,11 @@ class AdjustDispatch(object):
                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
                 insts_running_machine_dict[inst_id] = machine_id
                 i += 1
-
+                
         self.migrating_list = []
 
         print(getCurrentTime(), 'loading %s.csv' % self.submit_filename)        
-        app_dispatch_csv = csv.reader(open(r'%s\..\output\%s\%s.csv' % (runningPath, data_set, self.submit_filename), 'r'))
+        app_dispatch_csv = csv.reader(open(r'%s/../output/%s/%s.csv' % (runningPath, data_set, self.submit_filename), 'r'))
         for each_dispatch in app_dispatch_csv:
             inst_id = int(each_dispatch[0].split('_')[1])
             machine_id = int(each_dispatch[1].split('_')[1])
@@ -592,7 +675,7 @@ class AdjustDispatch(object):
             # inst 已经部署到了其他机器上，这里需要将其迁出
             if (inst_id in insts_running_machine_dict):
                 immigrating_machine = insts_running_machine_dict[inst_id]
-                self.machine_runing_info_dict[immigrating_machine].release_app(inst_id, app_res)
+                self.machine_runing_info_dict[immigrating_machine].release_app(inst_id, app_res)                
 
             if (not self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
                 self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)
@@ -674,7 +757,7 @@ class AdjustDispatch(object):
 #             next_cost = self.adj_dispatch()        
      
 
-        with open(r'%s\..\output\%s\%s_optimized_%s.csv' % 
+        with open(r'%s/../output/%s/%s_optimized_%s.csv' % 
                   (runningPath, data_set, self.submit_filename, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'w') as output_file:
             for each_disp in self.migrating_list:
                 output_file.write('%s\n' % (each_disp))
@@ -689,7 +772,7 @@ class AdjustDispatch(object):
         return cost / SLICE_CNT
         
     def output_optimized(self):
-#         with open(r'%s\..\output\%s\%s_optimized_%s.csv' % 
+#         with open(r'%s/../output/%s/%s_optimized_%s.csv' % 
 #                   (runningPath, data_set, self.submit_filename, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'w') as output_file:
 #             for each_disp in self.migrating_list:
 #                 output_file.write('%s\n' % (each_disp))
