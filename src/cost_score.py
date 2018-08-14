@@ -48,9 +48,9 @@ class AdjustDispatch(object):
         self.cost = 0
 
         if (data_set == 'a'):
-            self.submit_filename = 'a_5749'
+            self.submit_filename = 'a_5746'
         else:
-            self.submit_filename = 'b_7064'
+            self.submit_filename = 'b_6552'
 
         time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -191,14 +191,17 @@ class AdjustDispatch(object):
         
         app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
         
-        does_prefer = does_prefer_small_machine(app_res)
-        # 倾向于部署在小机器上
-        if (does_prefer):
-            machine_start_idx = 1
-            machine_end_idx = 3001
-        else:  # 倾向于部署在大机器上
-            machine_start_idx = 3001
-            machine_end_idx = 6001
+#         does_prefer = does_prefer_small_machine(app_res)
+#         # 倾向于部署在小机器上
+#         if (does_prefer):
+#             machine_start_idx = 1
+#             machine_end_idx = 3001
+#         else:  # 倾向于部署在大机器上
+#             machine_start_idx = 3001            
+#             machine_end_idx = 6001
+
+        machine_start_idx = 1
+        machine_end_idx = 6001
 
         for machine_id in range(machine_start_idx, machine_end_idx):
             if (machine_id == skipped_machine_id):
@@ -213,36 +216,38 @@ class AdjustDispatch(object):
                 
                 if (increased_score not in scores_list):
                     immigratable_machine_list.append( [{machine_id : [inst_id]},increased_score] )
+                    scores_list.append(increased_score)
         
         # 在 prefer 的机器中没有或只找到一台，则尝试在另外的机器中继续查找
-        if (len(immigratable_machine_list) > 1):
-            return immigratable_machine_list
-        
-        scores_list.clear()
-        # 没有可迁入的 小/大 机器，这里重新尝试 大/小 机器
-        if (does_prefer):
-            machine_start_idx = 3001
-            machine_end_idx = 6001      
-        else:
-            machine_start_idx = 1
-            machine_end_idx = 3001
-
-        for machine_id in range(machine_start_idx, machine_end_idx):
-            if (machine_id == skipped_machine_id):
-                continue
-
-            immigrating_machine = self.machine_runing_info_dict[machine_id]
-            if (immigrating_machine.can_dispatch(app_res, self.app_constraint_dict)):
-                increased_score = round(immigrating_machine.immigrating_delta_score(app_res), 2)
-                if (not b_is_first and increased_score > 0):
-                    continue
-                
-                if (increased_score not in scores_list):
-                    immigratable_machine_list.append( [{machine_id : [inst_id]},increased_score] )
-
-#                 appended, scores_list = append_score_by_score_diff(scores_list, increased_score)
-#                 if (appended):
+#         if (len(immigratable_machine_list) > 1):
+#             return immigratable_machine_list
+#         
+#         scores_list.clear()
+#         # 没有可迁入的 小/大 机器，这里重新尝试 大/小 机器
+#         if (does_prefer):
+#             machine_start_idx = 3001
+#             machine_end_idx = 6001      
+#         else:
+#             machine_start_idx = 1
+#             machine_end_idx = 3001
+# 
+#         for machine_id in range(machine_start_idx, machine_end_idx):
+#             if (machine_id == skipped_machine_id):
+#                 continue
+# 
+#             immigrating_machine = self.machine_runing_info_dict[machine_id]
+#             if (immigrating_machine.can_dispatch(app_res, self.app_constraint_dict)):
+#                 increased_score = round(immigrating_machine.immigrating_delta_score(app_res), 2)
+#                 if (not b_is_first and increased_score > 0):
+#                     continue
+# 
+#                 if (increased_score not in scores_list):
 #                     immigratable_machine_list.append( [{machine_id : [inst_id]},increased_score] )
+#                     scores_list.append(increased_score)
+# 
+# #                 appended, scores_list = append_score_by_score_diff(scores_list, increased_score)
+# #                 if (appended):
+# #                     immigratable_machine_list.append( [{machine_id : [inst_id]},increased_score] )
 
         return immigratable_machine_list    
     
@@ -482,11 +487,13 @@ class AdjustDispatch(object):
         
         next_cost = self.sum_scores_of_machine()
 
-#         while (self.sorted_machine_res[machine_start_idx][1].get_machine_real_score() > 98 and machine_start_idx < MACHINE_CNT):
-        for machine_id in range(1, 3001):
+        while (self.sorted_machine_res[machine_start_idx][1].get_machine_real_score() > 98 and machine_start_idx < MACHINE_CNT):
+            machine_id = self.sorted_machine_res[machine_start_idx][0]
+
+#       for machine_id in range(1, 3001):
             heavest_load_machine = self.machine_runing_info_dict[machine_id]
             if (len(heavest_load_machine.running_inst_list) == 0 or heavest_load_machine.get_machine_real_score() < 100):
-#                 machine_start_idx += 1
+                machine_start_idx += 1
                 continue
 
             heavest_load_machine.sort_running_inst_list(self.app_res_dict, self.inst_app_dict)
@@ -501,7 +508,7 @@ class AdjustDispatch(object):
             print(getCurrentTime(), 'machine %d, 1st / %d step solution is %d' % (machine_id, len(heavest_load_machine.running_inst_list),
                                                                                    len(dp_immigrating_solution_list)))
             if (len(heavest_load_machine.running_inst_list) == 0):
-#                 machine_start_idx += 1
+                machine_start_idx += 1
                 continue
 
             best_migrating_score = 0
@@ -541,7 +548,7 @@ class AdjustDispatch(object):
                               (heavest_load_machine.machine_res.machine_id, len(heavest_load_machine.running_inst_list), 
                                best_migrating_score, heavest_load_machine.get_machine_real_score()))
 
-#                 machine_start_idx += 1
+                machine_start_idx += 1
                 continue
 
             print_and_log('migrating solution for machine : %d, real score %f, migrating delta score %f, %s ' % \
