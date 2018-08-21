@@ -7,10 +7,11 @@ Created on Jun 25, 2018
  
 from global_param import *
 import numpy as np
+from OfflineJob import *
 
 class MachineRes(object):
     def __init__(self, each_machine):
-        self.machine_id = int(each_machine[0])
+        self.machine_id = int(each_machine[0].split('_')[1])
         self.cpu = float(each_machine[1]) # cpu 容量
         mem = float(each_machine[2]) #  mem
         disk = float(each_machine[3]) # 剩余 disk
@@ -32,7 +33,15 @@ class MachineRes(object):
         return
     
     def get_cpu_slice(self):
-        return self.res_vector[:98]
+        return self.res_vector[:SLICE_CNT]
+    
+    def get_mem_slice(self):
+        return self.res_vector[SLICE_CNT:SLICE_CNT * 2]
+    
+    def get_disk(self):
+        return self.res_vector[SLICE_CNT * 2]
+        
+        
     
     # 剩余 cpu 容量的均值
     def get_cpu_mean(self):
@@ -44,17 +53,25 @@ class MachineRes(object):
 
        
     def update_machine_res(self, app_res, ratio):
-
         self.res_vector += ratio * app_res.res_vector
 
         self.res_vector = np.where(np.less(self.res_vector , 0.001), 0, self.res_vector )
-
-        self.cpu_mean = np.mean(self.res_vector[:98])
-        
+        self.cpu_mean = np.mean(self.res_vector[:SLICE_CNT])        
         self.cpu_men_idx = int(self.cpu_mean / MAX_SCORE_DIFF)
-
-        self.machine_score = score_of_cpu_percent_slice((self.cpu - self.res_vector[:98]) / self.cpu)
         
+    def calculate_machine_score(self, running_inst_cnt):
+        self.machine_score = score_of_cpu_percent_slice((self.cpu - self.res_vector[:SLICE_CNT]) / self.cpu, running_inst_cnt)
+        
+    def update_machine_res_offline(self, offlineJob, current_slice, inst_cnt, ratio):
+        cpu_slice = self.get_cpu_slice()[current_slice : current_slice + offlineJob.run_mins]
+        cpu_slice += ratio * inst_cnt * offlineJob.cpu 
+
+        mem_slice = self.get_mem_slice()[current_slice : current_slice + offlineJob.run_mins]
+        mem_slice += ratio * inst_cnt * offlineJob.mem
+
+        self.res_vector = np.where(np.less(self.res_vector , 0.001), 0, self.res_vector )
+        self.cpu_mean = np.mean(self.res_vector[:SLICE_CNT])        
+        self.cpu_men_idx = int(self.cpu_mean / MAX_SCORE_DIFF)
         
         
     # 机器资源是否能够容纳 inst

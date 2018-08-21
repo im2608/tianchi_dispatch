@@ -8,23 +8,27 @@ Created on Jun 25, 2018
 from MachineRes import *
 from AppRes import *
 from global_param import *
- 
+from OfflineJob import *
+
 class MachineRunningInfo(object):
     def __init__(self, each_machine):
         self.running_machine_res = MachineRes(each_machine)  # 剩余的资源
         self.machine_res = MachineRes(each_machine) # 机器的资源
         self.running_inst_list = []
-        self.running_app_dict = {}
+        self.running_app_dict = {}        
         
         # 每个 app 迁出后所减少的分数
         self.migrating_delta_score_dict = {}
+        
+        self.running_offline_job_inst_dict = {}
+        
         return
 
     def calculate_migrating_delta_score(self, app_res_dict):
         for app_id in self.running_app_dict.keys():
             app_res = app_res_dict[app_id]
             tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
-            score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+            score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu, len(self.running_inst_list))
             self.migrating_delta_score_dict[app_id] = self.get_machine_real_score() - score
         return
     
@@ -48,6 +52,8 @@ class MachineRunningInfo(object):
             self.running_app_dict[app_res.app_id] -= 1
             if (self.running_app_dict[app_res.app_id] == 0):
                 self.running_app_dict.pop(app_res.app_id)
+
+        self.running_machine_res.calculate_machine_score(len(self.running_inst_list))
 
         return True
     
@@ -208,14 +214,14 @@ class MachineRunningInfo(object):
     def migrating_delta_score(self, app_res):
         tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
          
-        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu, len(self.running_inst_list))
         return self.get_machine_real_score() - score
     
 
     # 将 app 迁出后的分数
     def migrating_score(self, app_res):
         tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
-        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu, len(self.running_inst_list))
         
         return score
     
@@ -224,7 +230,7 @@ class MachineRunningInfo(object):
     def immigrating_score(self, app_res):
         tmp = self.running_machine_res.get_cpu_slice() - app_res.get_cpu_slice() # app 迁入后， 剩余的cpu 容量减少
         tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
-        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu, len(self.running_inst_list))
         
         return score
     
@@ -232,7 +238,7 @@ class MachineRunningInfo(object):
     def immigrating_delta_score(self, app_res):
         tmp = self.running_machine_res.get_cpu_slice() - app_res.get_cpu_slice() # app 迁入后， 剩余的cpu 容量减少
         tmp = np.where(np.less(tmp, 0.001), 0, tmp) # slice 由于误差可能不会为0， 这里凡是 < 0.001 的 slice 都设置成0
-        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu)
+        score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu, len(self.running_inst_list))
         return score - self.get_machine_real_score()   
     
     def release_app(self, inst_id, app_res):
@@ -313,3 +319,87 @@ class MachineRunningInfo(object):
             self.find_migratable_app(cur_inst_list + [candidate_insts[i]], left_inst_list_size - 1, i + 1, candidate_insts,
                                      candidate_apps_list, immgrate_inst_id, inst_app_dict, app_res_dict, app_constraint_dict)
         return
+    
+    def get_cpu_slice_by_index(self, offlineJob, current_slice):
+        usable_cpu_slice = self.running_machine_res.get_cpu_slice()[current_slice: current_slice + offlineJob.run_mins]
+        return usable_cpu_slice
+    
+    def get_mem_slice_by_index(self, offlineJob, current_slice):        
+        usable_mem_slice = self.running_machine_res.get_mem_slice()[current_slice: current_slice + offlineJob.run_mins]
+        return usable_mem_slice
+    
+    def immigrating_offline_delta_job(self, offlineJob, current_slice):
+        usable_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice)
+        usable_cpu_slice -= offlineJob.cpu
+
+    # 是否可以至少可以分发一个 job inst
+    def can_dispatch_offline_job(self, offlineJob, current_slice):
+        usable_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice)
+        usable_mem_slice = self.get_mem_slice_by_index(offlineJob, current_slice)
+
+        return (np.all(usable_cpu_slice >= offlineJob.cpu) and 
+                np.all(usable_mem_slice >= offlineJob.mem))
+
+    def dispatch_offline_job(self, offlineJob, current_slice):
+        if (not self.can_dispatch_offline_job(offlineJob, current_slice)):
+            return 0
+        
+        cpu_per = 0.5
+        # 在cpu 剩余容量不低于 cpu_per 的情况下， 看能分发多少个 job inst
+        machine_cpu_slice = self.running_machine_res.get_cpu_slice()[current_slice: current_slice + offlineJob.run_mins] - self.machine_res.cpu * cpu_per
+        if (np.any(machine_cpu_slice <= 0)):
+            return 0 
+
+        # 能分发多少个 job inst
+        dispatchable_inst_cnt = min(machine_cpu_slice.min() // offlineJob.cpu, offlineJob.inst_cnt) 
+
+        self.update_machine_res_offline(offlineJob, current_slice, dispatchable_inst_cnt, DISPATCH_RATIO)
+
+        return dispatchable_inst_cnt
+    
+    # finish_slice 为 offline job 的结束时间， 释放机器 的 cpu， mem 的 [current_slice, finish_slice) 区间
+    def release_offline_job(self, offline_jobs_dict, current_slice, finish_slice):
+        released = False
+        job_id_list = list(self.running_offline_job_inst_dict.keys())
+        for job_id in job_id_list:
+            if (offline_jobs_dict[job_id].run_mins == finish_slice):
+                self.update_machine_res_offline(offline_jobs_dict[job_id], current_slice, self.running_offline_job_inst_dict[job_id], RELEASE_RATIO)
+                released = True
+
+        return released
+
+    def update_machine_res_offline(self, offlineJob, current_slice, inst_cnt, ratio):
+        self.running_machine_res.update_machine_res_offline(offlineJob, current_slice, inst_cnt, ratio)
+
+        if (not offlineJob.job_id in self.running_offline_job_inst_dict):
+            self.running_offline_job_inst_dict[offlineJob.job_id] = [0, current_slice]
+
+        # 分发 offline job 时， ratio = -1， 表示消耗资源， 此处记录 offline job inst cnt， 所以要乘以 -1
+        self.running_offline_job_inst_dict[offlineJob.job_id][0] += (-ratio * inst_cnt)
+
+        if (self.running_offline_job_inst_dict[offlineJob.job_id][0] == 0):
+            self.running_offline_job_inst_dict.pop(offlineJob.job_id)
+
+        self.running_machine_res.calculate_machine_score(len(self.running_inst_list))
+        
+        
+    # 得到running finishe job 的最小完成时间
+    def running_offline_finish_slice(self, offlineJob_dict):
+        min_finish_slice = 1e9
+        
+        for job_id in self.running_offline_job_inst_dict.keys():
+            finish_slice = offlineJob_dict[job_id].run_mins
+            if (finish_slice < min_finish_slice):
+                min_finish_slice = finish_slice
+                
+        return min_finish_slice
+            
+
+
+
+
+
+
+
+
+        

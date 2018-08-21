@@ -22,9 +22,10 @@ from multiprocessing import cpu_count, Process, Pipe
 from nltk.ccg.lexicon import APP_RE
 
 class MachineResMgr(object):
-    def __init__(self):
+    def __init__(self, job_set):
         
-        log_file = r'%s/../log/dispatch_score_%s.txt' % (runningPath, data_set)
+        self.job_set = job_set
+        log_file = r'%s/../log/dispatch_score_%s.%s.txt' % (runningPath, data_set, job_set)
         
         self.print_all_scores = False
 
@@ -34,31 +35,29 @@ class MachineResMgr(object):
                             filename=log_file,
                             filemode='w')
 
+        self.used_machine_dict = {}
+
         #  记录 machine 的运行信息， 包括 cpu 使用量,  cpu 使用率 = cpu 使用量 / cpu 容量， d, p, m, pm, app list
         print(getCurrentTime(), 'loading machine_resources.csv...')
         self.machine_runing_info_dict = {} 
-#         machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources_reverse.csv' % (runningPath, data_set), 'r'))
-        machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.csv' % (runningPath, data_set), 'r'))
-        
-        self.used_machine_dict = {}
-
+        machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.%s.csv' % (runningPath, data_set, job_set), 'r'))
         for each_machine in machine_res_csv:
-            machine_id = int(each_machine[0])
+            machine_id = int(each_machine[0].split('_')[1])
             self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
 
         print(getCurrentTime(), 'loading app_resources.csv...')
         self.app_res_dict = [0 for x in range(APP_CNT + 1)]
         app_res_csv = csv.reader(open(r'%s/../input/%s/app_resources.csv' % (runningPath, data_set), 'r'))
         for each_app in app_res_csv:
-            app_id = int(each_app[0])
+            app_id = int(each_app[0].split('_')[1])
             self.app_res_dict[app_id] = AppRes(each_app)
 
         print(getCurrentTime(), 'loading app_interference.csv...')
         self.app_constraint_dict = {}
         app_cons_csv = csv.reader(open(r'%s/../input/%s/app_interference.csv' % (runningPath, data_set), 'r'))
         for each_cons in app_cons_csv:
-            app_id_a = int(each_cons[0])
-            app_id_b = int(each_cons[1])
+            app_id_a = int(each_cons[0].split('_')[1])
+            app_id_b = int(each_cons[1].split('_')[1])
             if (app_id_a not in self.app_constraint_dict):
                 self.app_constraint_dict[app_id_a] = {}
 
@@ -66,27 +65,19 @@ class MachineResMgr(object):
 
         self.migrating_list = []
     
-        print(getCurrentTime(), 'loading instance_deploy.csv...')
-        inited_filename = r'%s/../input/%s/initialized_deploy.csv' % (runningPath, data_set)
-        b_created_init_filename = os.path.exists(inited_filename)
+        inited_filename = r'%s/../input/%s/instance_deploy.%s.csv' % (runningPath, data_set, job_set)
+        print(getCurrentTime(), 'loading %s' % inited_filename)
         self.inst_app_dict = {}
-        inst_app_csv = csv.reader(open(r'%s/../input/%s/instance_deploy.csv' % (runningPath, data_set), 'r'))
+        inst_app_csv = csv.reader(open(inited_filename, 'r'))
         for each_inst in inst_app_csv:
-            inst_id = int(each_inst[0])
-            app_id = int(each_inst[1])
+            inst_id = int(each_inst[0].split('_')[1])
+            app_id = int(each_inst[1].split('_')[1])
             self.inst_app_dict[inst_id] = app_id
             if (len(each_inst[2]) > 0):
-                machine_id = int(each_inst[2])
+                machine_id = int(each_inst[2].split('_')[1])
                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
+                self.migrating_list.append('inst_%d,machine_%d' % (inst_id, machine_id))
 
-#         if (b_created_init_filename):
-#             print(getCurrentTime(), 'loading initialized_deploy.csv...')
-#             inst_disp_csv = csv.reader(open(r'%s\..\input\initialized_deploy.csv' % runningPath, 'r'))
-#             for each_inst in inst_disp_csv:
-#                 inst_id = int(each_inst[0].split('_')[1])
-#                 machine_id = int(each_inst[1].split('_')[1])
-#                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[self.inst_app_dict[inst_id]], DISPATCH_RATIO)
-#                 self.migrating_list.append(each_app)
         self.sort_machine()
         self.init_deploying()
         return
@@ -94,16 +85,15 @@ class MachineResMgr(object):
     def dispatch_inst_internal(self, inst_id, skipped_machins):
         app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
 
-        does_prefer = does_prefer_small_machine(app_res) 
-        # 优先分发到小机器
-        if (does_prefer):
-            b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 1, 3001, skipped_machins)
-            if (not b_migrated): # 小机器分发失败，分发到大机器
-                b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 3001, 6001, skipped_machins)
-        else: # 优先分发到大机器
-            b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 3001, 6001, skipped_machins)
-            if (not b_migrated):
-                b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 1, 3001, skipped_machins)
+        prefered_machine = g_prefered_machine[self.job_set] 
+
+        b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, prefered_machine[0], prefered_machine[1], skipped_machins)
+#             if (not b_migrated): # 小机器分发失败，分发到大机器
+#                 b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 3001, 6001, skipped_machins)
+#         else: # 优先分发到大机器
+#             b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 3001, 6001, skipped_machins)
+#             if (not b_migrated):
+#                 b_migrated = self.dispatch_inst_with_min_score(inst_id, app_res, 1, 3001, skipped_machins)
 
         return b_migrated
 
@@ -240,6 +230,8 @@ class MachineResMgr(object):
                 if (not self.dispatch_inst_internal(violate_inst_id, [violate_machine_id])):
                     print_and_log("ERROR! init_deploying() Failed to immigrate inst %d to machine %d" % (violate_inst_id))
                     exit(-1)
+                    
+                self.migrating_list.append('inst_%d,machine_%d' % (violate_inst_id, violate_machine_id))
 
                 violate_app_res = self.app_res_dict[self.inst_app_dict[violate_inst_id]]
                 violate_machine_res.release_app(violate_inst_id, violate_app_res)
@@ -557,7 +549,7 @@ class MachineResMgr(object):
 
 
     def output_submition(self):
-        filename = 'submit_%s.csv' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = 'submit_%s.%s.csv' % (datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), self.job_set)
         output_file = open(r'%s/../output/%s/%s' % (runningPath, data_set, filename), 'w')
         print(getCurrentTime(), 'writing output file %s' % filename)
 

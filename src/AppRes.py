@@ -5,9 +5,13 @@ import numpy as np
 class AppRes(object):
     def __init__(self, each_app):
         if (each_app is not None):
-            self.app_id = int(each_app[0])
-            cpu_slice = np.array(list(map(float, each_app[1].split('|'))))
+            self.app_id = int(each_app[0].split('_')[1])
+            cpu_slice = np.array(list(map(float, each_app[1].split('|'))))            
             mem_slice = np.array(list(map(float, each_app[2].split('|'))))
+
+            cpu_slice = cpu_slice.repeat(15) # for semi-final
+            mem_slice = mem_slice.repeat(15)
+
             disk = int(float(each_app[3]))
             p = int(each_app[4])
             m = int(each_app[5])
@@ -21,6 +25,8 @@ class AppRes(object):
             m = 0
             pm = 0
 
+        
+        
         self.res_vector = np.hstack((cpu_slice, mem_slice, disk, p, m, pm))
         
         self.cpu_mean = np.mean(cpu_slice)
@@ -28,13 +34,13 @@ class AppRes(object):
         return
     
     def get_cpu_slice(self):
-        return self.res_vector[:98]    
+        return self.res_vector[:SLICE_CNT]    
     
     def get_mem_slice(self):
-        return self.res_vector[98:196]
+        return self.res_vector[SLICE_CNT:SLICE_CNT * 2]
     
     def get_disk(self):
-        return self.res_vector[196]
+        return self.res_vector[SLICE_CNT * 2]
     
     def get_cpu_mean(self):
         return self.cpu_mean

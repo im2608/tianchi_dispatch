@@ -23,23 +23,23 @@ MAX_DISK = 1024
 MAX_P = 7
 MAX_M = 7
 MAX_PM = 9
-SLICE_CNT = 98
+SLICE_CNT = 98 * 15
 ISOTIMEFORMAT = "%Y-%m-%d %X"
 
 MACHINE_CNT = 6000
 APP_CNT = 9338
 INST_CNT = 68219
-        
+
 def getCurrentTime():
     return "[%s]" % (time.strftime(ISOTIMEFORMAT, time.localtime()))
 
 def split_slice(slice):
     return np.array(list(map(float, slice.split('|'))))
 
-def score_of_cpu_percent_slice(slice):
+def score_of_cpu_percent_slice(slice, running_inst_cnt):
     tmp = np.where(np.less(slice, 0.001), 0, slice)
     return np.where(np.greater(tmp, 0), \
-                    1 + 10 * (np.exp(np.maximum(0, tmp - 0.5)) - 1), \
+                    1 + (1 + running_inst_cnt) * (np.exp(np.maximum(0, tmp - 0.5)) - 1), \
                     0).sum()
 
 def print_and_log(msg):
@@ -65,7 +65,7 @@ def does_prefer_small_machine(app_res):
 
         return False
 
-data_set = 'b'
+data_set = 'sf'
 
 ALPHA = 1.0 #启发因子，信息素的重要程度
 BETA = 2.0  #期望因子
@@ -159,3 +159,11 @@ def append_score_by_score_diff(score_list, score):
 
     return appended, score_list
 
+BASE_SCORE = 1500
+g_prefered_machine = {
+    'a' :(1, 8000),
+    'b' :(1, 8000),
+    'c' :(6001, 9000),
+    'd' :(6001, 9000),
+    'e' :(6001, 8000),
+    }
