@@ -167,3 +167,5 @@ g_prefered_machine = {
     'd' :(6001, 9000),
     'e' :(6001, 8000),
     }
+
+g_max_offline_job_step = {'a' : 10, 'b':9, 'c':10, 'd':8}

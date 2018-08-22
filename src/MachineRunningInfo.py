@@ -9,6 +9,7 @@ from MachineRes import *
 from AppRes import *
 from global_param import *
 from OfflineJob import *
+from sympy.physics.units.dimensions import current
 
 class MachineRunningInfo(object):
     def __init__(self, each_machine):
@@ -363,7 +364,7 @@ class MachineRunningInfo(object):
         job_id_list = list(self.running_offline_job_inst_dict.keys())
         for job_id in job_id_list:
             if (offline_jobs_dict[job_id].run_mins == finish_slice):
-                self.update_machine_res_offline(offline_jobs_dict[job_id], current_slice, self.running_offline_job_inst_dict[job_id], RELEASE_RATIO)
+                self.update_machine_res_offline(offline_jobs_dict[job_id], current_slice, self.running_offline_job_inst_dict[job_id][0], RELEASE_RATIO)
                 released = True
 
         return released
@@ -372,7 +373,7 @@ class MachineRunningInfo(object):
         self.running_machine_res.update_machine_res_offline(offlineJob, current_slice, inst_cnt, ratio)
 
         if (not offlineJob.job_id in self.running_offline_job_inst_dict):
-            self.running_offline_job_inst_dict[offlineJob.job_id] = [0, current_slice]
+            self.running_offline_job_inst_dict[offlineJob.job_id] = [0, current_slice]  # inst 数量， 启动时间
 
         # 分发 offline job 时， ratio = -1， 表示消耗资源， 此处记录 offline job inst cnt， 所以要乘以 -1
         self.running_offline_job_inst_dict[offlineJob.job_id][0] += (-ratio * inst_cnt)
@@ -383,16 +384,24 @@ class MachineRunningInfo(object):
         self.running_machine_res.calculate_machine_score(len(self.running_inst_list))
         
         
-    # 得到running finishe job 的最小完成时间
-    def running_offline_finish_slice(self, offlineJob_dict):
+    # 得到 current_slice 之后的 running finishe job 的最小完成时间
+    def running_offline_min_finish_slice(self, offlineJob_dict, current_slice):
         min_finish_slice = 1e9
         
         for job_id in self.running_offline_job_inst_dict.keys():
-            finish_slice = offlineJob_dict[job_id].run_mins
-            if (finish_slice < min_finish_slice):
+            finish_slice = self.running_offline_job_inst_dict[job_id][1] + offlineJob_dict[job_id].run_mins # 启动时间 + 运行时间 
+            if (finish_slice > current_slice and finish_slice < min_finish_slice):
                 min_finish_slice = finish_slice
-                
+
         return min_finish_slice
+    
+    # 得到某个 offline job 的完成时间
+    def get_finish_slice_of_offline(self, offlineJob):
+        finish_slice = -1
+        if (offlineJob.job_id in self.running_offline_job_inst_dict):
+            finish_slice = self.running_offline_job_inst_dict[offlineJob.job_id][1] + offlineJob.run_mins # 启动时间 + 运行时间
+
+        return finish_slice
             
 
 

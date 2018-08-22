@@ -199,7 +199,7 @@ class AdjustDispatch(object):
                 continue
 
             if (immigrating_machine.can_dispatch(app_res, self.app_constraint_dict)):
-                
+
                 increased_score = round(immigrating_machine.immigrating_delta_score(app_res), 2)
                 if (not b_is_first and increased_score > 0):
                     continue
@@ -527,8 +527,10 @@ class AdjustDispatch(object):
 
         return next_cost
     
-    def adj_dispatch_dp(self):
-        print_and_log('entered adj_dispatch_dp')
+    def adj_dispatch_dp(self, round_num):
+        print_and_log('entered adj_dispatch_dp{%d)' % round_num)
+        
+        self.sorte_machine()
 
         machine_start_idx = 0
         
@@ -611,12 +613,12 @@ class AdjustDispatch(object):
                         print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (each_inst, immigrating_machine))
                         return
 
-                    self.migrating_list.append('inst_%d,machine_%d' % (each_inst, immigrating_machine))
+                    self.migrating_list.append('%d,inst_%d,machine_%d' % (round_num,each_inst, immigrating_machine))
             
                     heavest_load_machine.release_app(each_inst, app_res) # 迁出 inst
 
-            self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), \
-                                         key = lambda d : d[1].get_machine_real_score(), reverse = True) # 排序
+#             self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), \
+#                                          key = lambda d : d[1].get_machine_real_score(), reverse = True) # 排序
             # 迁移之后重新计算得分
             next_cost = self.sum_scores_of_machine()   
             
@@ -826,8 +828,8 @@ class AdjustDispatch(object):
             print(getCurrentTime(), 'loading %s' % optimized_file)
             app_dispatch_csv = csv.reader(open(optimized_file, 'r'))
             for each_dispatch in app_dispatch_csv:
-                inst_id = int(each_dispatch[0].split('_')[1])
-                machine_id = int(each_dispatch[1].split('_')[1])
+                inst_id = int(each_dispatch[1].split('_')[1])
+                machine_id = int(each_dispatch[2].split('_')[1])
                 app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
      
                 # inst 已经部署到了其他机器上，这里需要将其迁出
@@ -841,7 +843,7 @@ class AdjustDispatch(object):
                     exit(-1)
      
                 insts_running_machine_dict[inst_id] = machine_id      
-                self.migrating_list.append('inst_%d,machine_%d' % (inst_id, machine_id)) 
+                self.migrating_list.append('1,inst_%d,machine_%d' % (inst_id, machine_id)) 
 
         self.sorte_machine()
         
@@ -893,38 +895,20 @@ class AdjustDispatch(object):
         if (self.sorted_machine_res[-1][1].get_machine_real_score() > 98):
             return cost;
 
-        print_and_log('optimizing for H -> L')        
+#         print_and_log('optimizing for H -> L')        
 #         next_cost = self.adj_dispatch_dp_fork()
 #         print_and_log('After adj_dispatch_dp_fork(), score %f -> %f' % (cost, next_cost))
 
-        next_cost = self.adj_dispatch_dp()
-        print_and_log('After adj_dispatch_dp(), score %f -> %f' % (cost, next_cost))
+        for round_num in [1, 2, 3]:
+            next_cost = self.adj_dispatch_dp(round_num)
+            print_and_log('After adj_dispatch_dp(%d), score %f -> %f' % (round_num, cost, next_cost))
 
-#         next_cost = self.adj_dispatch_ex(1470)
-#         print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
-#         while (next_cost < cost):
-#             cost = next_cost
-#             next_cost = self.adj_dispatch_ex(100)
+#             next_cost = self.adj_dispatch_ex(1470)
 #             print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
-
-#         next_cost = self.adj_dispatch()
-#         print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))
-#         while (next_cost < cost):            
-#             cost = next_cost
-#             next_cost = self.adj_dispatch()
-#             print_and_log('After adj_dispatch(), score %f -> %f' % (cost, next_cost))            
-        
-#         next_cost = self.adj_dispatch_reverse()            
-#         while (next_cost < cost):
-#             print_and_log('After adj_dispatch_reverse(), score %f -> %f' % (cost, next_cost))
-#             cost = next_cost
-#             next_cost = self.adj_dispatch()        
-     
-
-        with open(r'%s/../output/%s/%s_optimized_%s.csv' % 
-                  (runningPath, data_set, self.job_set, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'w') as output_file:
-            for each_disp in self.migrating_list:
-                output_file.write('%s\n' % (each_disp))
+#             while (next_cost < cost):
+#                 cost = next_cost
+#                 next_cost = self.adj_dispatch_ex(100)
+#                 print_and_log('After adj_dispatch_ex(), score %f -> %f' % (cost, next_cost))
 
         cost = 0
         for machine_id, machine_running_res in self.sorted_machine_res:

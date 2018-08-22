@@ -63,7 +63,7 @@ class MachineRes(object):
         self.machine_score = score_of_cpu_percent_slice((self.cpu - self.res_vector[:SLICE_CNT]) / self.cpu, running_inst_cnt)
         
     def update_machine_res_offline(self, offlineJob, current_slice, inst_cnt, ratio):
-        cpu_slice = self.get_cpu_slice()[current_slice : current_slice + offlineJob.run_mins]
+        cpu_slice = self.get_cpu_slice()[current_slice : current_slice + offlineJob.run_mins]        
         cpu_slice += ratio * inst_cnt * offlineJob.cpu 
 
         mem_slice = self.get_mem_slice()[current_slice : current_slice + offlineJob.run_mins]

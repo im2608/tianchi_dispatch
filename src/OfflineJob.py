@@ -17,4 +17,22 @@ class OfflineJob(object):
             for i in range(5, len(each_job_in_csv)):
                 if (len(each_job_in_csv[i]) > 0):
                     self.prefix_jobs.append(each_job_in_csv[i])
+                    
+    # 得到某个 offline job 的 prefix job 的最后完成时间
+    @staticmethod
+    def get_max_finish_slice_of_offline(offlineJob, machine_runing_info_dict, offline_jobs_dict):
+        max_finish_slice = 0
+        for prefix_job in offlineJob.prefix_jobs:
+            for machine_id, machine_running_res in machine_runing_info_dict.items():
+                finish_slice = machine_running_res.get_finish_slice_of_offline(offline_jobs_dict[prefix_job])
+                if (finish_slice > 0 and finish_slice > max_finish_slice):
+                    max_finish_slice = finish_slice
+                    
+        return max_finish_slice
+                
+            
+        
+        
+        
+        
         

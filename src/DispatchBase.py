@@ -54,14 +54,14 @@ class DispatchBase(object):
                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
                 insts_running_machine_dict[inst_id] = machine_id    
                 
-        optimized_file = r'%s/../output/%s/%s_refined.csv' % (runningPath, data_set, self.job_set)
+        optimized_file = r'%s/../output/%s/%s_optimized.csv' % (runningPath, data_set, self.job_set)
         
         if (os.path.exists(optimized_file)):
             print(getCurrentTime(), 'loading %s' % optimized_file)
             app_dispatch_csv = csv.reader(open(optimized_file, 'r'))
             for each_dispatch in app_dispatch_csv:
-                inst_id = int(each_dispatch[0].split('_')[1])
-                machine_id = int(each_dispatch[1].split('_')[1])
+                inst_id = int(each_dispatch[1].split('_')[1])
+                machine_id = int(each_dispatch[2].split('_')[1])
                 app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
      
                 # inst 已经部署到了其他机器上，这里需要将其迁出
@@ -94,7 +94,7 @@ class DispatchBase(object):
 
         with open(self.output_filename, 'w') as output_file:
             for each_disp in self.dispatch_job_list:
-                output_file.write('%s\n' % (each_disp))
+                output_file.write('%s,machine_%d,%d,%d\n' % (each_disp[0], each_disp[1], each_disp[2], each_disp[3]))
 
         output_file.close()
 
@@ -102,5 +102,5 @@ class DispatchBase(object):
         for machine_id, machine_running_res in self.machine_runing_info_dict.items():
             cost += machine_running_res.get_machine_real_score()
     
-        print(getCurrentTime(), 'finla cost is %f / %f' % (cost, cost / SLICE_CNT))
+#         print(getCurrentTime(), 'finla cost is %f / %f' % (cost, cost / SLICE_CNT))
         
