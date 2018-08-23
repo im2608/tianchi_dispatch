@@ -42,8 +42,11 @@ def score_of_cpu_percent_slice(slice, running_inst_cnt):
                     1 + (1 + running_inst_cnt) * (np.exp(np.maximum(0, tmp - 0.5)) - 1), \
                     0).sum()
 
-def print_and_log(msg):
-    print(getCurrentTime(), msg)
+def print_and_log(msg, print_new_line=True):
+    if (print_new_line):
+        print(getCurrentTime(), msg)
+    else:
+        print(getCurrentTime(), "%s\r" % msg, end='')
     logging.info(msg)
 
 # return True for small machine, False for big machine otherwise
@@ -71,7 +74,7 @@ ALPHA = 1.0 #启发因子，信息素的重要程度
 BETA = 2.0  #期望因子
 ROU = 0.5   #信息素残留参数
 
-MAX_SCORE_DIFF = 0.3
+MAX_SCORE_DIFF = 10
 
 def find_insert_pos_no(score_list, score, s, e):
     list_len = e - s

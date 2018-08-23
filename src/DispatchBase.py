@@ -74,7 +74,8 @@ class DispatchBase(object):
                     print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (inst_id, machine_id))
                     exit(-1)
      
-                insts_running_machine_dict[inst_id] = machine_id      
+                insts_running_machine_dict[inst_id] = machine_id   
+
                 
         time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -88,8 +89,25 @@ class DispatchBase(object):
 
         self.output_filename = r'%s/../output/%s/dispatch_offline.%s.%s.csv' % (runningPath, data_set, self.job_set, time_now)
         
-        self.dispatch_job_list = []    
+        self.dispatch_job_list = []
+        
+        self.sorte_machine()
+        cost = self.sum_scores_of_machine()
+        for machine_id, machine_running_res in self.sorted_machine_res:
+            logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
+        print_and_log('cost of [%s] is %f/%f' % (self.job_set, cost, cost/SLICE_CNT))
+    
 
+    def sorte_machine(self):
+        self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key = lambda d : d[1].get_machine_real_score(), reverse = True)
+
+    def sum_scores_of_machine(self):
+        scores = 0
+        for machine_id, machine_running_res in self.sorted_machine_res:
+            scores += machine_running_res.get_machine_real_score()
+            
+        return scores
+    
     def output_optimized(self):
 
         with open(self.output_filename, 'w') as output_file:

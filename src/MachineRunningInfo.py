@@ -9,7 +9,6 @@ from MachineRes import *
 from AppRes import *
 from global_param import *
 from OfflineJob import *
-from sympy.physics.units.dimensions import current
 
 class MachineRunningInfo(object):
     def __init__(self, each_machine):
@@ -22,6 +21,8 @@ class MachineRunningInfo(object):
         self.migrating_delta_score_dict = {}
         
         self.running_offline_job_inst_dict = {}
+        
+        self.cpu_per = self.machine_res.cpu * 0
         
         return
 
@@ -333,28 +334,64 @@ class MachineRunningInfo(object):
         usable_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice)
         usable_cpu_slice -= offlineJob.cpu
 
-    # 是否可以至少可以分发一个 job inst
+    # 在 cpu_per 的情况下是否可以至少可以分发一个 job inst
     def can_dispatch_offline_job(self, offlineJob, current_slice):
-        usable_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice)
-        usable_mem_slice = self.get_mem_slice_by_index(offlineJob, current_slice)
+        if (current_slice + offlineJob.run_mins >= SLICE_CNT):
+            return False
 
+        # 在cpu 剩余容量不低于 cpu_per 的情况下， 看能分发多少个 job inst
+        usable_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice) - self.cpu_per
+        usable_mem_slice = self.get_mem_slice_by_index(offlineJob, current_slice)
+        
         return (np.all(usable_cpu_slice >= offlineJob.cpu) and 
                 np.all(usable_mem_slice >= offlineJob.mem))
+        
+    # 从 current_slice 开始， 找到能够分发 offline job 的最早的 slice, 以及可以分发的 inst 的数量
+    def seek_min_dispatchable_slice_and_cnt(self, offlineJob, current_slice):
+        cpu_slice = self.running_machine_res.get_cpu_slice()
+        mem_slice = self.running_machine_res.get_mem_slice()
+        min_dispatchable_slice = current_slice
+        
+        # 从最小完成时间之后开始查找可以分发 offline job 的 slice
+        while (min_dispatchable_slice + offlineJob.run_mins < SLICE_CNT):
+            if (self.can_dispatch_offline_job(offlineJob, min_dispatchable_slice)):
+                break
+            
+            min_dispatchable_slice += 1
+            while (min_dispatchable_slice + offlineJob.run_mins < SLICE_CNT):
+                if (cpu_slice[min_dispatchable_slice] - self.cpu_per >= offlineJob.cpu and 
+                    mem_slice[min_dispatchable_slice] >= offlineJob.mem):
+                    break
+                min_dispatchable_slice += 1
 
-    def dispatch_offline_job(self, offlineJob, current_slice):
+        if (min_dispatchable_slice + offlineJob.run_mins < SLICE_CNT):
+            dispatch_cnt = self.get_dispatch_offline_inst_cnt(offlineJob, min_dispatchable_slice)
+            return min_dispatchable_slice, dispatch_cnt
+        else:
+            return SLICE_CNT, 0
+    
+    def get_dispatch_offline_inst_cnt(self, offlineJob, current_slice):
         if (not self.can_dispatch_offline_job(offlineJob, current_slice)):
             return 0
         
-        cpu_per = 0.5
         # 在cpu 剩余容量不低于 cpu_per 的情况下， 看能分发多少个 job inst
-        machine_cpu_slice = self.running_machine_res.get_cpu_slice()[current_slice: current_slice + offlineJob.run_mins] - self.machine_res.cpu * cpu_per
+        machine_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice) - self.cpu_per
         if (np.any(machine_cpu_slice <= 0)):
             return 0 
 
         # 能分发多少个 job inst
-        dispatchable_inst_cnt = min(machine_cpu_slice.min() // offlineJob.cpu, offlineJob.inst_cnt) 
+        dispatchable_inst_cnt = min(machine_cpu_slice.min() // offlineJob.cpu, offlineJob.inst_cnt)
+        
+        return dispatchable_inst_cnt 
 
-        self.update_machine_res_offline(offlineJob, current_slice, dispatchable_inst_cnt, DISPATCH_RATIO)
+
+    # 在 current_slice 上是否能够分发 offline job, 能分发多少个
+    def dispatch_offline_job(self, offlineJob, current_slice):
+        # 能分发多少个 job inst
+        dispatchable_inst_cnt = self.get_dispatch_offline_inst_cnt(offlineJob, current_slice)
+
+        if (dispatchable_inst_cnt > 0):
+            self.update_machine_res_offline(offlineJob, current_slice, dispatchable_inst_cnt, DISPATCH_RATIO)
 
         return dispatchable_inst_cnt
     
@@ -386,14 +423,40 @@ class MachineRunningInfo(object):
         
     # 得到 current_slice 之后的 running finishe job 的最小完成时间
     def running_offline_min_finish_slice(self, offlineJob_dict, current_slice):
-        min_finish_slice = 1e9
+        min_dispatchable_slice = 1e9
         
         for job_id in self.running_offline_job_inst_dict.keys():
             finish_slice = self.running_offline_job_inst_dict[job_id][1] + offlineJob_dict[job_id].run_mins # 启动时间 + 运行时间 
-            if (finish_slice > current_slice and finish_slice < min_finish_slice):
-                min_finish_slice = finish_slice
+            if (finish_slice > current_slice and finish_slice < min_dispatchable_slice):
+                min_dispatchable_slice = finish_slice
 
-        return min_finish_slice
+        return min_dispatchable_slice
+    
+    def running_offline_min_dispatchable_slice(self, offlineJob_dict, offlineJob, current_slice):
+        min_dispatchable_slice = 1e9
+        
+        # 找到在当前机器上运行的在 current_slice 之后的 offline job 的最小完成时间
+        for job_id in self.running_offline_job_inst_dict.keys():
+            finish_slice = self.running_offline_job_inst_dict[job_id][1] + offlineJob_dict[job_id].run_mins # 启动时间 + 运行时间 
+            if (finish_slice > current_slice and finish_slice < min_dispatchable_slice):
+                min_dispatchable_slice = finish_slice
+
+        cpu_slice = self.running_machine_res.get_cpu_slice()
+        mem_slice = self.running_machine_res.get_mem_slice()
+        
+        # 从最小完成时间之后开始查找可以分发 offline job 的 slice
+        while (min_dispatchable_slice < SLICE_CNT):
+            if (self.can_dispatch_offline_job(offlineJob, min_dispatchable_slice)):
+                return min_dispatchable_slice
+            
+            min_dispatchable_slice += 1
+            while (min_dispatchable_slice < SLICE_CNT):
+                if (cpu_slice[min_dispatchable_slice] >= offlineJob.cpu and mem_slice[min_dispatchable_slice] >= offlineJob.mem):
+                    break
+                
+                min_dispatchable_slice += 1
+
+        return min_dispatchable_slice
     
     # 得到某个 offline job 的完成时间
     def get_finish_slice_of_offline(self, offlineJob):

@@ -34,6 +34,7 @@ def verify_offline_dispatch(job_set):
     dispatched_job_dict = {}
     for dispatch in offline_jobs_dispatch_csv:
         job_id = dispatch[0]
+        start_time = int(dispatch[2])
         inst_cnt = int(dispatch[3])
         job_symbol = job_id.split("-")[0]
         
@@ -42,20 +43,30 @@ def verify_offline_dispatch(job_set):
             if (job_symbol not in dispatched_job_dict):
                 print("Error, job %s is dispatching, but all of its prefix job did run" % job_id)
                 exit(-1)
-                
+
             for each_prefix in offlineJob.prefix_jobs:
                 if (each_prefix not in dispatched_job_dict[job_symbol]):
                     print("Error, job %s is dispatching, but its prefix job %s did run" % (job_id, each_prefix))
                     exit(-1)
+                    
+                each_prefixOfflineJob = offline_jobs_dict[each_prefix]
+                if (start_time < dispatched_job_dict[job_symbol][each_prefix] + each_prefixOfflineJob.run_mins):
+                    print("Error, job %s's start time %d is earlier than its prefix job %s, last start %d, run mins %d" % 
+                          (job_id, start_time, each_prefix, dispatched_job_dict[job_symbol][each_prefix], each_prefixOfflineJob.run_mins))
+                    exit(-1)
 
         if (job_symbol not in dispatched_job_dict):
-            dispatched_job_dict[job_symbol] = set()
+            dispatched_job_dict[job_symbol] = {}
 
         offline_jobs_dict[job_id].inst_cnt -= inst_cnt
         if (offline_jobs_dict[job_id].inst_cnt == 0): # 一个 job 已经分发完毕
-            dispatched_job_dict[job_symbol].add(job_id)
-            
-    for each_job_id, offlineJOb in offline_jobs_dict.items():
+            dispatched_job_dict[job_symbol][job_id] = start_time # 记录下 job 最后的启动时间
+            if (start_time + offline_jobs_dict[job_id].run_mins >= SLICE_CNT):
+                print("Error, job %s's start time %d too late, run mins %d" % 
+                      (job_id, start_time, offline_jobs_dict[job_id].run_mins))
+                exit(-1)
+
+    for each_job_id, offlineJob in offline_jobs_dict.items():
         if (offlineJob.inst_cnt > 0):
             print("Error, job %s still has %d instances left" % (each_job_id, offlineJob.inst_cnt))
             
@@ -120,11 +131,27 @@ def get_max_step_of_offline(job_set):
             
     print(getCurrentTime(), 'job set %s max step %d' % (job_set, max_step))
 
+def combine_output():
+    with open(r'%s/../output/%s/sf_auto.csv' % (runningPath, data_set), 'w') as output_file:
+        for job_set in 'abcde':
+            
+            app_dispatch_csv = csv.reader(open(r'%s/../output/%s/%s_optimized.csv' % (runningPath, data_set, job_set), 'r'))
+            for each in app_dispatch_csv:
+                output_file.write("%s,%s,%s\n" % (each[0], each[1], each[2]))
+
+            if (job_set != 'e'):
+                offline_jobs_dispatch_csv = csv.reader(open(r'%s/../output/%s/dispatch_offline.%s.csv' % (runningPath, data_set, job_set), 'r'))
+                for each in offline_jobs_dispatch_csv:
+                    output_file.write("%s,%s,%s,%s\n" % (each[0], each[1], each[2], each[3]))
+
+                output_file.write("#\n")
+            
     
 if __name__ == '__main__':
-#     correct_offline_dispatch()
     
-    job_set = 'abcde'    
+    combine_output()
+    
+    job_set = 'abcd'
     for each in job_set:
 #         topological_sort(each)
 #         refine_online_dispatch(each)
