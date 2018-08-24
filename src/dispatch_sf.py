@@ -151,10 +151,10 @@ if __name__ == '__main__':
     
     combine_output()
     
-    job_set = 'abcd'
-    for each in job_set:
+#     job_set = 'abcd'
+#     for each in job_set:
 #         topological_sort(each)
 #         refine_online_dispatch(each)
 #         get_max_step_of_offline(each)
-        verify_offline_dispatch(each)            
+#         verify_offline_dispatch(each)            
         

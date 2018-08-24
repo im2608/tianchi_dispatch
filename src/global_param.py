@@ -172,3 +172,5 @@ g_prefered_machine = {
     }
 
 g_max_offline_job_step = {'a' : 10, 'b':9, 'c':10, 'd':8}
+
+g_job_cnt = {'a':5241, 'b':5637, 'c':2840, 'd':2250}
