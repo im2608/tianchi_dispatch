@@ -134,7 +134,7 @@ def get_max_step_of_offline(job_set):
 def combine_output():
     with open(r'%s/../output/%s/sf_auto.csv' % (runningPath, data_set), 'w') as output_file:
         for job_set in 'abcde':
-            
+            print(getCurrentTime(), 'combining %s' % job_set)            
             app_dispatch_csv = csv.reader(open(r'%s/../output/%s/%s_optimized.csv' % (runningPath, data_set, job_set), 'r'))
             for each in app_dispatch_csv:
                 output_file.write("%s,%s,%s\n" % (each[0], each[1], each[2]))

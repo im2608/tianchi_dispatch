@@ -11,8 +11,8 @@ import random
 
 class DispatchOfflineJob(DispatchBase):
 
-    def __init__(self, job_set):
-        DispatchBase.__init__(self, job_set)
+    def __init__(self, job_set, optimized_dispatch_file):
+        DispatchBase.__init__(self, job_set, optimized_dispatch_file)
 
         offline_jobs_csv = csv.reader(open(r'%s/../input/%s/job_info.%s.csv' % (runningPath, data_set, job_set), 'r'))
 
@@ -103,8 +103,9 @@ class DispatchOfflineJob(DispatchBase):
                 
 if __name__ == '__main__':
     job_set = sys.argv[1].split("=")[1]
+    optimized_dispatch_file = sys.argv[2].split("=")[1]
 
-    dispatch_offline_job = DispatchOfflineJob(job_set)
+    dispatch_offline_job = DispatchOfflineJob(job_set, optimized_dispatch_file)
     dispatch_offline_job.dispatch_offline_jobs()
     
     

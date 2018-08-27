@@ -12,7 +12,7 @@ import datetime
 
 class DispatchBase(object):
 
-    def __init__(self, job_set):
+    def __init__(self, job_set, optimized_dispatch_file):
         self.job_set = job_set
         
         print(getCurrentTime(), 'loading app_resources.csv...')
@@ -53,8 +53,8 @@ class DispatchBase(object):
                 machine_id = int(each_inst[2].split('_')[1])
                 self.machine_runing_info_dict[machine_id].update_machine_res(inst_id, self.app_res_dict[app_id], DISPATCH_RATIO)
                 insts_running_machine_dict[inst_id] = machine_id    
-                
-        optimized_file = r'%s/../output/%s/%s_optimized.csv' % (runningPath, data_set, self.job_set)
+
+        optimized_file = r'%s/../output/%s/%s' % (runningPath, data_set, optimized_dispatch_file)
         
         if (os.path.exists(optimized_file)):
             print(getCurrentTime(), 'loading %s' % optimized_file)
