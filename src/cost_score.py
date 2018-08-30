@@ -30,7 +30,7 @@ class AdjustDispatch(object):
         machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.%s.csv' % (runningPath, data_set, job_set), 'r'))
         for each_machine in machine_res_csv:
             machine_id = int(each_machine[0].split('_')[1])
-            self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
+            self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine, job_set) 
         
         print(getCurrentTime(), 'loading app_resources.csv')
         self.app_res_dict = {}
@@ -79,42 +79,58 @@ class AdjustDispatch(object):
 #         while (self.sorted_machine_res[-1][1].get_machine_real_score() == 0 and b_balanced_atleast_one):            
 #             print_and_log("here still are empyty load machines...")
 #             b_balanced_atleast_one = False
-        for round_num in [1, 2]:
+        for round_num in [1]:
             machine_idx = 0
-            skipped_machine_set = set()
+            
+            heavy_load_machine_list = []
+            light_load_machine_list = []
 
-            while (self.sorted_machine_res[machine_idx][1].get_machine_real_score() > BASE_SCORE and
-                   machine_idx < g_prefered_machine[self.job_set][1] + 1):
-                heavy_load_machine_id = self.sorted_machine_res[machine_idx][0]
-                heavy_load_machine_running_res = self.sorted_machine_res[machine_idx][1]
+            self.sort_machine()
+                
+            for machine_id, machine_running_res in self.sorted_machine_res:
+                score = machine_running_res.get_machine_real_score()
+                if (score > BASE_SCORE):
+                    heavy_load_machine_list.append(machine_id)
+                else:
+                    light_load_machine_list.append(machine_id)
+                    
+            light_load_machine_list = sorted(light_load_machine_list, key = lambda machine_id : self.machine_runing_info_dict[machine_id].get_machine_real_score()) 
+
+            for heavy_load_machine_id in heavy_load_machine_list:                
+                heavy_load_machine_running_res = self.machine_runing_info_dict[heavy_load_machine_id]
                 heavy_score = heavy_load_machine_running_res.get_machine_real_score()
                 
                 #  将重载机器上的 inst 随机迁移到其他轻载的机器上直到重载机器也成为轻载的
                 b_balanced = True
                 while (heavy_load_machine_running_res.get_machine_real_score() > BASE_SCORE and b_balanced):
                     b_balanced = False
-                    
+
+                    heavy_load_machine_running_res.sort_running_inst_list(self.app_res_dict, self.inst_app_dict, reverse=True)                    
                     inst_id = heavy_load_machine_running_res.running_inst_list[0]
                     app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
                     
-                    machine_range = list(range(1, g_prefered_machine[self.job_set][1] + 1))
-                    random.shuffle(machine_range)
-    
-                    for light_load_machine_id in machine_range:
-                        # 本轮有迁出的机器不再迁入 inst
-                        if (light_load_machine_id in skipped_machine_set):
-                            continue
-
+                    light_load_machine_list = sorted(light_load_machine_list, 
+                                             key = lambda machine_id : self.machine_runing_info_dict[machine_id].get_machine_real_score())
+                    
+                    for light_load_machine_id in light_load_machine_list:
                         light_load_machine_running_res = self.machine_runing_info_dict[light_load_machine_id]
                         if (light_load_machine_running_res.get_machine_real_score() > BASE_SCORE):
                             continue
+                        
+                        # 重负载的 inst 放到空机器上 
+                        if (self.app_res_dict[self.inst_app_dict[inst_id]].get_cpu_mean() >= 16  and 
+                            light_load_machine_running_res.get_machine_real_score() > 0):
+                            continue
 
+                        light_score =  light_load_machine_running_res.get_machine_real_score()
                         if (light_load_machine_running_res.dispatch_app(inst_id, app_res, self.app_constraint_dict)):
-                            skipped_machine_set.add(heavy_load_machine_id)
                             heavy_load_machine_running_res.release_app(inst_id, app_res)
                             b_balanced = True
                             b_balanced_atleast_one = True
                             self.migrating_list.append('%d,inst_%d,machine_%d' % (round_num, inst_id, light_load_machine_id))
+                            if (light_load_machine_running_res.get_machine_real_score() > BASE_SCORE):
+                                logging.info("machine %s, real score %f -> %f with inst %d" % 
+                                             (light_load_machine_id, light_score, light_load_machine_running_res.get_machine_real_score(), inst_id))
                             break
 
                 print_and_log("round %d load balance: machine_%d %f -> %f" % 
@@ -354,50 +370,95 @@ class AdjustDispatch(object):
                 
         return migration_solution
     
-    def adj_dispatch_dp(self, round_num):
-        print_and_log('entered adj_dispatch_dp{%d)' % round_num)
-        
-        # 将 running inst 最少的机器上的 inst 全部迁出
-        self.sort_machine_by_running_inst_list()
+    def adj_dispatch_dp(self, round_num, opt):
+        print_and_log('entered adj_dispatch_dp{%d, %s)' % (round_num, opt))
+
         migrating_machine_set = []
+        skipped_machine_list = []
         
-        longest_inst_list = 10
-        for machine_start_idx in range(g_prefered_machine[self.job_set][1]):
-            if (len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) > 0 and 
-                len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) < longest_inst_list):
+        if (opt):
+            # 将 running inst 最少的机器上的 inst 全部迁出
+            self.sort_machine_by_running_inst_list()
+            longest_inst_list = 3
+            for machine_start_idx in range(g_prefered_machine[self.job_set][1]):
+                if (len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) > 0 and 
+                    len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) <= longest_inst_list):
+                    migrating_machine_set.append(self.sorted_machine_res[machine_start_idx][0])
+
+            print_and_log("Here are %d machines whose running inst list less than %d" % (len(migrating_machine_set), longest_inst_list))
+        else:
+            # 从得分最高的前 10% 的机器迁出 cpu 最高的 n 个 inst
+            self.sort_machine()
+            for machine_start_idx in range(g_prefered_machine[job_set][1] // 10):
                 migrating_machine_set.append(self.sorted_machine_res[machine_start_idx][0])
 
+            print_and_log("Here are %d machines which top 10per score" % (len(migrating_machine_set)))
+
         machine_start_idx = 0
+                                                                                                     # 有迁出 inst 的机器                不再迁入 inst
+        next_round_migrating_machine, migrated_machine_list = self.migrate_machine_dp(opt, round_num, migrating_machine_set, migrating_machine_set)
+
+#         while (len(next_round_migrating_machine) > 0 and len(next_round_migrating_machine) < len(migrating_machine_set)):
+#             # 有迁出 inst 的机器不再迁入 inst
+#             skipped_machine_list = migrated_machine_list
+#             
+#             # 将 next_round_migrating_machine 按照 runing inst 数量排序后分成两部分， 将第一部分迁移到第二部分
+#             next_round_migrating_machine = sorted(next_round_migrating_machine, key=lambda machine_id: len(self.machine_runing_info_dict[machine_id].running_inst_list))
+#             migrating_machine_len = int(len(next_round_migrating_machine) * 0.5)
+#             migrating_machine_set = next_round_migrating_machine[0:migrating_machine_len]
+#             next_round_migrating_machine = next_round_migrating_machine[migrating_machine_len:len(next_round_migrating_machine)]
+#             print_and_log("split next_round_migrating_machine to %d / %d " % (len(migrating_machine_set), len(next_round_migrating_machine)))
+#             
+#             # 将要迁出的机器也不再迁入 inst
+#             skipped_machine_list.extend(migrating_machine_set)
+#             
+#             next_round_migrating_machine, migrated_machine_list = self.migrate_machine_dp(opt, round_num, next_round_migrating_machine, skipped_machine_list)
 
         next_cost = self.sum_scores_of_machine()
-        
-        # 本轮迁出 inst 的机器不再迁入 inst
-        skipped_machine_set = set()
-        
-        is_windows = 'Windows' in platform.platform()
 
-#         while (self.sorted_machine_res[machine_start_idx][1].get_machine_real_score() > BASE_SCORE and
-#                machine_start_idx < g_prefered_machine[job_set][1]):
-#         while (len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) < 10 and
-#                machine_start_idx < g_prefered_machine[job_set][1]):
+        print_and_log('leaving adj_dispatch_dp with next cost %f' % next_cost)
+        return next_cost
+    
+    #  将 migrating_machine_set 中的 inst 迁移到其他机器上， 但是要跳过 skipped_machine_list
+    def migrate_machine_dp(self, opt, round_num, migrating_machine_set, skipped_machine_list):
+        print_and_log("migrate_machine_dp(%s, %d, migrating len %d, skipped len %d)" % 
+                      (opt, round_num, len(migrating_machine_set), len(skipped_machine_list)))
+        is_windows = 'Windows' in platform.platform()
+        
+        # 本轮没有迁出 inst 的机器， 下一轮继续尝试
+        next_round_migrating_machine = []
+        
+        # 本轮有迁出 inst 的机器，下一轮迁入时要跳过 
+        migrated_machine_list = []
+        
+        machine_start_idx = 0
+
         for machine_id in migrating_machine_set:
             heavest_load_machine = self.machine_runing_info_dict[machine_id]
+            heavy_score = heavest_load_machine.get_machine_real_score() 
             if (len(heavest_load_machine.running_inst_list) == 0):
                 machine_start_idx += 1
                 continue
 
-            heavest_load_machine.sort_running_inst_list(self.app_res_dict, self.inst_app_dict)
+            if (opt):
+                heavest_load_machine.sort_running_inst_list(self.app_res_dict, self.inst_app_dict, reverse=False)
+                migrating_running_inst_list = heavest_load_machine.running_inst_list
+            else:
+                n_max_cpu_inst = 5
+                migrating_running_inst_list = heavest_load_machine.get_max_cpu_inst_list(self.app_res_dict, self.inst_app_dict, n_max_cpu_inst)
 
-            inst_id = heavest_load_machine.running_inst_list[0]
+            inst_id = migrating_running_inst_list[0]
             app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
 
             # 生成迁移方案的第一步， 以及迁入后增加的分数
-            dp_immigrating_solution_list = self.get_immigratable_machine(inst_id, migrating_machine_set)
-            print(getCurrentTime(), 'machine %d, 1st / %d step solution is %d' % (machine_id, len(heavest_load_machine.running_inst_list),
-                                                                                   len(dp_immigrating_solution_list)))
+            # 本轮迁出 inst 的机器不再迁入 inst
+            dp_immigrating_solution_list = self.get_immigratable_machine(inst_id, skipped_machine_list)
+            print(getCurrentTime(), 'machine %d, real score %f, 1st / %d step solution is %d' % 
+                  (machine_id, heavy_score, len(migrating_running_inst_list), len(dp_immigrating_solution_list)))
+
             best_migrating_score = 0
                 # 将 inst list 迁移出后所减少的分数
-            tmp_app = self.app_res_dict[self.inst_app_dict[heavest_load_machine.running_inst_list[0]]]
+            tmp_app = self.app_res_dict[self.inst_app_dict[migrating_running_inst_list[0]]]
             migrating_delta_score = heavest_load_machine.migrating_delta_score(tmp_app)
             
             for each_solution in dp_immigrating_solution_list:
@@ -406,16 +467,17 @@ class AdjustDispatch(object):
                     best_migraring_solution = copy.deepcopy(each_solution)
 
             # 生成第 2 -> N 步的迁移方案
-            total_steps = len(heavest_load_machine.running_inst_list)
-            for inst_idx in range(1, len(heavest_load_machine.running_inst_list)):
+            total_steps = len(migrating_running_inst_list)
+            for inst_idx in range(1, total_steps):
                 print(getCurrentTime(), 'searching machine %d %d/%d\r' % (machine_id, inst_idx, total_steps), end='')
-                each_inst = heavest_load_machine.running_inst_list[inst_idx]
+                each_inst = migrating_running_inst_list[inst_idx]
 
                 # 将 inst list 迁移出后所减少的分数
-                tmp_app = AppRes.sum_app_res_by_inst(heavest_load_machine.running_inst_list[:(inst_idx + 1)], self.inst_app_dict, self.app_res_dict)
+                tmp_app = AppRes.sum_app_res_by_inst(migrating_running_inst_list[:(inst_idx + 1)], self.inst_app_dict, self.app_res_dict)
                 migrating_delta_score = heavest_load_machine.migrating_delta_score(tmp_app)
 
-                one_step_solution = self.get_immigratable_machine(each_inst, migrating_machine_set)
+                # 本轮迁出 inst 的机器不再迁入 inst
+                one_step_solution = self.get_immigratable_machine(each_inst, skipped_machine_list)
 
                 if (is_windows):
                     dp_immigrating_solution_list = self.merge_migration_solution(dp_immigrating_solution_list, one_step_solution,
@@ -436,15 +498,18 @@ class AdjustDispatch(object):
 
             # 迁入所增加的分数至少要减少 1 分 , 否则不用再继续尝试
             if (best_migrating_score < 1):
-                print_and_log('migrating %s, running len %d, migrating delta score %f (real score %f), continue... ' % \
-                              (heavest_load_machine.machine_res.machine_id, len(heavest_load_machine.running_inst_list), 
-                               best_migrating_score, heavest_load_machine.get_machine_real_score()))
+                print_and_log('migrating %s ( %d / %d ), running len %d, migrating delta score %f (real score %f), continue... ' % \
+                              (heavest_load_machine.machine_res.machine_id, machine_start_idx, len(migrating_machine_set),
+                               len(migrating_running_inst_list), best_migrating_score, heavest_load_machine.get_machine_real_score()))
+                
+                next_round_migrating_machine.append(heavest_load_machine.machine_res.machine_id)
 
                 machine_start_idx += 1
                 continue
 
-            print_and_log('migrating solution for machine : %d, real score %f, migrating delta score %f, %s ' % \
-                          (machine_id, heavest_load_machine.get_machine_real_score(), best_migrating_score,
+            print_and_log('migrating solution for machine : %d (%d / %d ), real score %f, migrating delta score %f, %s ' % \
+                          (machine_id, machine_start_idx, len(migrating_machine_set), 
+                           heavest_load_machine.get_machine_real_score(), best_migrating_score,
                            best_migraring_solution))
             # 迁入
             for immigrating_machine, inst_list in best_migraring_solution[0].items():
@@ -460,17 +525,20 @@ class AdjustDispatch(object):
             
                     heavest_load_machine.release_app(each_inst, app_res) # 迁出 inst
 
-            # 迁移之后重新计算得分
-            next_cost = self.sum_scores_of_machine()
-            
-            skipped_machine_set.add(heavest_load_machine.machine_res.machine_id)   
-            
+            if (len(heavest_load_machine.running_inst_list) > 0):
+                next_round_migrating_machine.append(heavest_load_machine.machine_res.machine_id)
+            else:
+                migrated_machine_list.append(heavest_load_machine.machine_res.machine_id)
+
             machine_start_idx += 1
+
+            # save solutio any time
             self.output_optimized()
 
-        print_and_log('leaving adj_dispatch_dp with next cost %f' % next_cost)
-        return next_cost
+        print_and_log("migrate_machine_dp(%s, %d) leaving..., next round len %d, migrated len %d)" % 
+              (opt, round_num, len(next_round_migrating_machine), len(migrated_machine_list)))
 
+        return next_round_migrating_machine, migrated_machine_list
 
     def sum_scores_of_machine(self):
         scores = 0
@@ -569,14 +637,13 @@ class AdjustDispatch(object):
             logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
         
         print_and_log('cost of [%s] is %f/%f' % (self.job_set, cost, cost/SLICE_CNT))
-        
-        if (self.sorted_machine_res[-1][1].get_machine_real_score() > 98):
-            return cost;
 
         # round 1, 2 are in self.balance_inst_between_machine()
-        for round_num in [3]:
-            next_cost = self.adj_dispatch_dp(round_num)
-            print_and_log('After adj_dispatch_dp(%d), score %f -> %f' % (round_num, cost, next_cost))
+        opt = True
+        for round_num in [2, 3]:
+            next_cost = self.adj_dispatch_dp(round_num, opt)
+            opt = not opt
+            print_and_log('After adj_dispatch_dp(%d, %s), score %f -> %f' % (round_num, opt, cost, next_cost))
 
         cost = 0
         for machine_id, machine_running_res in self.sorted_machine_res:
@@ -598,7 +665,7 @@ class AdjustDispatch(object):
         for machine_id, machine_running_res in self.sorted_machine_res:
             cost += machine_running_res.get_machine_real_score()
     
-        print(getCurrentTime(), 'finla cost is %f / %f' % (cost, cost / SLICE_CNT))
+        print_and_log('finla cost is %f / %f' % (cost, cost / SLICE_CNT))
 
 def add_name():
     submit_filename = 'submit6006_20180704_092755'

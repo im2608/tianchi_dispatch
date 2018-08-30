@@ -37,7 +37,7 @@ def split_slice(slice):
     return np.array(list(map(float, slice.split('|'))))
 
 def score_of_cpu_percent_slice(slice, running_inst_cnt):
-    tmp = np.where(np.less(slice, 0.001), 0, slice)
+    tmp = np.where(np.less(slice, 0.0001), 0, slice)
     return np.where(np.greater(tmp, 0), \
                     1 + (1 + running_inst_cnt) * (np.exp(np.maximum(0, tmp - 0.5)) - 1), \
                     0).sum()
@@ -75,26 +75,6 @@ BETA = 2.0  #期望因子
 ROU = 0.5   #信息素残留参数
 
 MAX_SCORE_DIFF = 10
-
-def find_insert_pos_no(score_list, score, s, e):
-    list_len = e - s
-    if (list_len == 2):
-        return e
-    
-    mid = int((e + s)/2)
-    if (score_list[mid - 1] < score and score_list[mid] > score):
-        return mid
-
-    if (score_list[mid] < score and score_list[mid + 1] > score):
-        return mid + 1
-    
-    if (score < score_list[mid]):
-        return find_insert_pos(score_list, score, s, mid)
-    
-    if (score > score_list[mid]):
-        return find_insert_pos(score_list, score, mid + 1, e)
-    
-    return mid
 
 def find_insert_pos(score_list, score, s, e):
     mid = int((e + s)/2)
@@ -174,3 +154,6 @@ g_prefered_machine = {
 g_max_offline_job_step = {'a' : 10, 'b':9, 'c':10, 'd':8}
 
 g_job_cnt = {'a':5241, 'b':5637, 'c':2840, 'd':2250}
+
+# cpu 最小剩余容量 for dispatching offline jobs
+g_min_cpu_left_useage_per = {'a':0.5, 'b':0.5, 'c':0.45, 'd':0.45}

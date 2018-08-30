@@ -39,7 +39,7 @@ class DispatchBase(object):
 
         for each_machine in machine_res_csv:
             machine_id = int(each_machine[0].split('_')[1])
-            self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine) 
+            self.machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine, job_set) 
 
         insts_running_machine_dict = dict()
         self.inst_app_dict = {}

@@ -7,7 +7,7 @@ from global_param import *
 import csv
 from OfflineJob import *
 import pandas as pd
-
+import datetime
 
 def correct_offline_dispatch():
     file_name_abcd = ['dispatch_offline.a.20180822_075423.csv',]
@@ -131,20 +131,124 @@ def get_max_step_of_offline(job_set):
             
     print(getCurrentTime(), 'job set %s max step %d' % (job_set, max_step))
 
+from AppRes import *
+from MachineRunningInfo import *
 def combine_output():
-    with open(r'%s/../output/%s/sf_auto.csv' % (runningPath, data_set), 'w') as output_file:
-        for job_set in 'abcde':
-            print(getCurrentTime(), 'combining %s' % job_set)            
-            app_dispatch_csv = csv.reader(open(r'%s/../output/%s/%s_optimized.csv' % (runningPath, data_set, job_set), 'r'))
-            for each in app_dispatch_csv:
-                output_file.write("%s,%s,%s\n" % (each[0], each[1], each[2]))
+    
+    log_file = r'%s/../log/combine.log' % (runningPath)
 
-            if (job_set != 'e'):
-                offline_jobs_dispatch_csv = csv.reader(open(r'%s/../output/%s/dispatch_offline.%s.csv' % (runningPath, data_set, job_set), 'r'))
-                for each in offline_jobs_dispatch_csv:
-                    output_file.write("%s,%s,%s,%s\n" % (each[0], each[1], each[2], each[3]))
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
+                        datefmt='%a, %d %b %Y %H:%M:%S',
+                        filename=log_file,
+                        filemode='w')
 
-                output_file.write("#\n")
+    print(getCurrentTime(), 'loading app_resources.csv...')
+    app_res_dict = [0 for x in range(APP_CNT + 1)]
+    app_res_csv = csv.reader(open(r'%s/../input/%s/app_resources.csv' % (runningPath, data_set), 'r'))
+    for each_app in app_res_csv:
+        app_id = int(each_app[0].split('_')[1])
+        app_res_dict[app_id] = AppRes(each_app)
+
+    print(getCurrentTime(), 'loading app_interference.csv...')
+    app_constraint_dict = {}
+    app_cons_csv = csv.reader(open(r'%s/../input/%s/app_interference.csv' % (runningPath, data_set), 'r'))
+    for each_cons in app_cons_csv:
+        app_id_a = int(each_cons[0].split('_')[1])
+        app_id_b = int(each_cons[1].split('_')[1])
+        if (app_id_a not in app_constraint_dict):
+            app_constraint_dict[app_id_a] = {}
+
+        app_constraint_dict[app_id_a][app_id_b] = int(each_cons[2])
+        
+    combine_file_dict = {'a':['a_optimized_20180826_194316.csv', 'dispatch_offline.a.20180828_151152.csv', 0.5], 
+                         'b':['b_optimized_20180827_115852.csv', 'dispatch_offline.b.20180829_171357.csv', 0.5],
+#                          'c':['c_optimized.csv', 'dispatch_offline.c.csv', 0.5],
+                         'c':['c_optimized_20180828_102623.csv', 'dispatch_offline.c.20180829_205637.c.csv', 0.5],
+                         
+#                         'd':['d_optimized_20180826_101920.csv', 'dispatch_offline.d.20180827_104152.csv', 0.5],
+                        'd':['d_optimized_20180826_101920.csv', 'dispatch_offline.d.20180829_222331.csv', 0.5],
+                         'e':['e_optimized.csv', "", 0],}
+
+    time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    with open(r'%s/../output/%s/sf_%s.csv' % (runningPath, data_set, time_now), 'w') as output_file:
+        for job_set in 'abcded':
+            print(getCurrentTime(), 'combining %s' % job_set)
+
+            print(getCurrentTime(), 'loading machine_resources.csv...')
+            machine_runing_info_dict = {} 
+            machine_res_csv = csv.reader(open(r'%s/../input/%s/machine_resources.%s.csv' % (runningPath, data_set, job_set), 'r'))
+
+            for each_machine in machine_res_csv:
+                machine_id = int(each_machine[0].split('_')[1])
+                machine_runing_info_dict[machine_id] = MachineRunningInfo(each_machine, job_set)            
+
+            insts_running_machine_dict = {} 
+            inst_app_dict = {}
+            inst_app_csv = csv.reader(open(r'%s/../input/%s/instance_deploy.%s.csv' % (runningPath, data_set, job_set), 'r'))
+            for each_inst in inst_app_csv:
+                inst_id = int(each_inst[0].split('_')[1])
+                app_id = int(each_inst[1].split('_')[1])
+                inst_app_dict[inst_id]  = app_id
+                if (len(each_inst[2]) > 0):
+                    machine_id = int(each_inst[2].split('_')[1])
+                    machine_runing_info_dict[machine_id].update_machine_res(inst_id, app_res_dict[app_id], DISPATCH_RATIO)
+                    insts_running_machine_dict[inst_id] = machine_id    
+
+            offline_jobs_csv = csv.reader(open(r'%s/../input/%s/job_info.%s.csv' % (runningPath, data_set, job_set), 'r'))
+            offline_jobs_dict = {}
+            for each_job in offline_jobs_csv:
+                job_id = each_job[0]        
+                offline_jobs_dict[job_id] = OfflineJob(each_job)
+
+            app_dispatch_csv = csv.reader(open(r'%s/../output/%s/%s' % (runningPath, data_set, combine_file_dict[job_set][0]), 'r'))
+            with open(r'%s/../output/%s/sf.%s.csv' % (runningPath, data_set, job_set), 'w') as jobset_output_file:
+                for each in app_dispatch_csv:
+                    inst_id = int(each[1].split('_')[1])
+                    machine_id = int(each[2].split('_')[1])
+                    app_res = app_res_dict[inst_app_dict[inst_id]]
+                    
+                    # inst 已经部署到了其他机器上，这里需要将其迁出
+                    if (inst_id in insts_running_machine_dict):
+                        immigrating_machine = insts_running_machine_dict[inst_id]
+                        machine_runing_info_dict[immigrating_machine].release_app(inst_id, app_res)                
+                    
+                    if (not machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, app_constraint_dict)):
+                        machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, app_constraint_dict)
+                        print("Error, failed to dispatch instance %d to machine %d" % (inst_id, machine_id))
+                        exit(-1)
+    
+                    insts_running_machine_dict[inst_id] = machine_id    
+                    
+                    output_file.write("%s,%s,%s\n" % (each[0], each[1], each[2]))
+                    jobset_output_file.write("%s,%s,%s\n" % (each[0], each[1], each[2]))
+    
+                if (job_set != 'e'):
+                    offline_jobs_dispatch_csv = csv.reader(open(r'%s/../output/%s/%s' % (runningPath, data_set, combine_file_dict[job_set][1]), 'r'))
+                    for each in offline_jobs_dispatch_csv:
+                        job_id = each[0]
+                        machine_id = int(each[1].split('_')[1])
+                        dispatch_slice = int(each[2])
+                        inst_cnt = int(each[3])
+                        if (machine_runing_info_dict[machine_id].dispatch_offline_job_one(offline_jobs_dict[job_id], dispatch_slice) == 0):
+                            machine_runing_info_dict[machine_id].dispatch_offline_job_one(offline_jobs_dict[job_id], dispatch_slice)
+                            print("Error, failed to dispatch job %s to machine %d" % (job_id, machine_id))
+                            exit(-1)
+                    
+                        output_file.write("%s,%s,%s,%s\n" % (each[0], each[1], each[2], each[3]))
+                        jobset_output_file.write("%s,%s,%s,%s\n" % (each[0], each[1], each[2], each[3]))
+    
+                    output_file.write("#\n")
+                
+            scores = 0
+            sorted_machine_res = sorted(machine_runing_info_dict.items(), key = lambda d : d[1].get_machine_real_score(), reverse = True)
+            for machine_id, machine_running_res in sorted_machine_res:
+                scores += machine_running_res.get_machine_real_score()
+                logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
+
+            print_and_log('cost of [%s / %s / %s / %f] is %f/%f' % 
+                          (job_set, combine_file_dict[job_set][0], combine_file_dict[job_set][1], combine_file_dict[job_set][2], scores, scores/SLICE_CNT))
+
             
     
 if __name__ == '__main__':

@@ -15,7 +15,7 @@ def app_classification():
     app_res_dict = {}
     app_res_csv = csv.reader(open(r'%s\..\input\%s\app_resources.csv' % (runningPath, data_set), 'r'))
     for each_app in app_res_csv:
-        app_id = int(each_app[0])
+        app_id = int(each_app[0].split('_')[1])
         cpu_slice = np.round(np.array(list(map(float, each_app[1].split('|')))).mean(), 4)
         mem_slice = np.round(np.array(list(map(float, each_app[2].split('|')))).mean(), 4)
         disk = int(float(each_app[3]))
@@ -142,4 +142,5 @@ def test_fork():
     
     
 if __name__ == '__main__':
-    test_fork()
+#     test_fork()
+    app_classification()

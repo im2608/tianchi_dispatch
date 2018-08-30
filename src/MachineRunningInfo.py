@@ -11,7 +11,7 @@ from global_param import *
 from OfflineJob import *
 
 class MachineRunningInfo(object):
-    def __init__(self, each_machine):
+    def __init__(self, each_machine, job_set):
         self.running_machine_res = MachineRes(each_machine)  # 剩余的资源
         self.machine_res = MachineRes(each_machine) # 机器的资源
         self.running_inst_list = []
@@ -22,10 +22,13 @@ class MachineRunningInfo(object):
         
         self.running_offline_job_inst_dict = {}
         
-        self.cpu_per = self.machine_res.cpu * 0.5
+        self.cpu_per = self.machine_res.cpu * g_min_cpu_left_useage_per[job_set]
         
         return
-
+    
+    def set_cpu_per(self, min_cpu_left_useage_per):
+        self.cpu_per = self.machine_res.cpu * min_cpu_left_useage_per
+    
     def calculate_migrating_delta_score(self, app_res_dict):
         for app_id in self.running_app_dict.keys():
             app_res = app_res_dict[app_id]
@@ -59,8 +62,8 @@ class MachineRunningInfo(object):
 
         return True
     
-    def sort_running_inst_list(self, app_res_dict, inst_app_dict):
-        self.running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=False)
+    def sort_running_inst_list(self, app_res_dict, inst_app_dict, reverse=False):
+        self.running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=reverse)
 
     # 查找机器上的 running inst list 是否有违反约束的 inst
     def any_self_violate_constriant(self, inst_app_dict, app_res_dict, app_constraint_dict):
@@ -495,10 +498,28 @@ class MachineRunningInfo(object):
             finish_slice = self.running_offline_job_inst_dict[offlineJob.job_id][1] + offlineJob.run_mins # 启动时间 + 运行时间
 
         return finish_slice
+    
+    # 迁移出哪些 inst，  cpu 可以 <= 0.5
+    def get_overload_inst_list(self, app_res_dict, inst_app_dict):
+        running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=True)
+        real_score = self.get_machine_real_score()
+        for i in range(0, len(running_inst_list)):
+            tmp_app_res = AppRes.sum_app_res_by_inst(running_inst_list[:i + 1], inst_app_dict, app_res_dict)
+            delta_score = self.migrating_delta_score(tmp_app_res)
+            if (real_score - delta_score < SLICE_CNT):
+                return running_inst_list[:i + 1]
+            
+        return running_inst_list
             
 
+    # 返回 cpu 最高的 n 个 inst
+    def get_max_cpu_inst_list(self, app_res_dict, inst_app_dict, n):        
+        running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=True)
+        
+        if (len(running_inst_list) <= n):
+            return running_inst_list
 
-
+        return running_inst_list[:n]
 
 
 

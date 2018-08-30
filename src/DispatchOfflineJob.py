@@ -15,13 +15,42 @@ class DispatchOfflineJob(DispatchBase):
         DispatchBase.__init__(self, job_set, optimized_dispatch_file)
 
         offline_jobs_csv = csv.reader(open(r'%s/../input/%s/job_info.%s.csv' % (runningPath, data_set, job_set), 'r'))
-
         self.offline_jobs_dict = {}
         for each_job in offline_jobs_csv:
             job_id = each_job[0]
     
             self.offline_jobs_dict[job_id] = OfflineJob(each_job)
-         
+            
+    # 在可用的机器上遍历， 从 dispatch_slice 开始， 找到能够分发 offline job 的最早的 slice
+    def seek_min_dispatchable_slice(self, offlineJob, dispatch_slice, machine_list, use_idle_machine):
+        # 在可用的机器上遍历， 找到最小可分发的 slice
+        min_dispatchable_slice = SLICE_CNT
+        dispatchable_machine_list = []
+        
+        max_idle_machine = 10
+        assigned_idle_machine = 0
+        
+        for machine_id in machine_list:
+            machine_running_res = self.machine_runing_info_dict[machine_id] 
+
+            # 是否往空机器上部署 offline job
+            if (not use_idle_machine and len(machine_running_res.running_inst_list) == 0):
+                continue
+
+            dispatchable_slice = machine_running_res.seek_min_dispatchable_slice(offlineJob, dispatch_slice)
+            if (dispatchable_slice < SLICE_CNT and dispatchable_slice <= min_dispatchable_slice):
+                if (dispatchable_slice < assigned_idle_machine):
+                    min_dispatchable_slice = dispatchable_slice
+                    dispatchable_machine_list.clear()
+                if (use_idle_machine and len(machine_running_res.running_inst_list) == 0):
+                      if (assigned_idle_machine < max_idle_machine):
+                          dispatchable_machine_list.append(machine_id)
+                          assigned_idle_machine += 1
+                else:
+                    dispatchable_machine_list.append(machine_id)
+                
+        return min_dispatchable_slice, dispatchable_machine_list       
+            
     def dispatch_offline_jobs(self):
         sorted_job_file = open(r'%s/../input/%s/sorted_job.%s.csv' % (runningPath, data_set, self.job_set), 'r')
         sorted_job_csv = csv.reader(sorted_job_file)
@@ -57,6 +86,11 @@ class DispatchOfflineJob(DispatchBase):
                         dispatchable_machine_list = []
                         for machine_id in shuffled_machine_list:
                             machine_running_res = self.machine_runing_info_dict[machine_id] 
+
+                            # 不往空机器上部署 offline job
+                            if (len(machine_running_res.running_inst_list) == 0):
+                                continue
+
                             dispatchable_slice = machine_running_res.seek_min_dispatchable_slice(offlineJob, dispatch_slice)
                             if (dispatchable_slice < SLICE_CNT and dispatchable_slice <= min_dispatchable_slice):                                
                                 if (dispatchable_slice < min_dispatchable_slice):
@@ -76,6 +110,7 @@ class DispatchOfflineJob(DispatchBase):
                         for machine_id in dispatchable_machine_list:
                             machine_running_res = self.machine_runing_info_dict[machine_id]
                             dispatch_cnt = machine_running_res.dispatch_offline_job_one(offlineJob, dispatch_slice)
+
                             if (dispatch_cnt > 0):
                                 offlineJob.inst_cnt -= dispatch_cnt                                
                                 self.dispatch_job_list.append([job_id, machine_id, dispatch_slice, dispatch_cnt])
@@ -84,9 +119,9 @@ class DispatchOfflineJob(DispatchBase):
 
                                 if (offlineJob.inst_cnt == 0):
                                     dispatched_job += 1
-                                    print_and_log("all instance of job %s are dispatched, last start time %d, will finish at %d (%d/%d)" %
+                                    print_and_log("all instance of job %s are dispatched, last start time %d, will finish at %d (%d/%d) %s" %
                                              (offlineJob.job_id, min_dispatchable_slice, dispatch_slice + offlineJob.run_mins, 
-                                              dispatched_job, g_job_cnt[self.job_set]))
+                                              dispatched_job, g_job_cnt[self.job_set], self.job_set))
                                     break
 
                     # while offlineJob.inst_cnt > 0:
@@ -104,6 +139,8 @@ class DispatchOfflineJob(DispatchBase):
 if __name__ == '__main__':
     job_set = sys.argv[1].split("=")[1]
     optimized_dispatch_file = sys.argv[2].split("=")[1]
+    
+    print_and_log("running DispatchOfflineJob... cpu per %f" % g_min_cpu_left_useage_per[job_set])
 
     dispatch_offline_job = DispatchOfflineJob(job_set, optimized_dispatch_file)
     dispatch_offline_job.dispatch_offline_jobs()
