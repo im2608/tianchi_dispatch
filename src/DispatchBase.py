@@ -95,9 +95,9 @@ class DispatchBase(object):
         cost = self.sum_scores_of_machine()
         for machine_id, machine_running_res in self.sorted_machine_res:
             logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
-        print_and_log('cost of [%s] is %f/%f' % (self.job_set, cost, cost/SLICE_CNT))
+        print_and_log('cost of [%s] is %f/%f, cpu per %f' % 
+                      (self.job_set, cost, cost/SLICE_CNT, g_min_cpu_left_useage_per[self.job_set]))
     
-
     def sorte_machine(self):
         self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key = lambda d : d[1].get_machine_real_score(), reverse = True)
 
@@ -115,10 +115,6 @@ class DispatchBase(object):
                 output_file.write('%s,machine_%d,%d,%d\n' % (each_disp[0], each_disp[1], each_disp[2], each_disp[3]))
 
         output_file.close()
-
-        cost = 0
-        for machine_id, machine_running_res in self.machine_runing_info_dict.items():
-            cost += machine_running_res.get_machine_real_score()
-    
-#         print(getCurrentTime(), 'finla cost is %f / %f' % (cost, cost / SLICE_CNT))
         
+        print(getCurrentTime(), 'output to %s' % self.output_filename)
+    

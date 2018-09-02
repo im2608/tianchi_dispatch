@@ -39,7 +39,7 @@ class DispatchOfflineJob(DispatchBase):
 
             dispatchable_slice = machine_running_res.seek_min_dispatchable_slice(offlineJob, dispatch_slice)
             if (dispatchable_slice < SLICE_CNT and dispatchable_slice <= min_dispatchable_slice):
-                if (dispatchable_slice < assigned_idle_machine):
+                if (dispatchable_slice < min_dispatchable_slice):
                     min_dispatchable_slice = dispatchable_slice
                     dispatchable_machine_list.clear()
                 if (use_idle_machine and len(machine_running_res.running_inst_list) == 0):
@@ -58,11 +58,11 @@ class DispatchOfflineJob(DispatchBase):
         # 每一行是一个 job 的执行序列， 每一 step 之间用逗号隔开， 每一 step 可能会同时执行多个job，用冒号隔开
         dispatched_job = 0
         for job_q in sorted_job_csv:
-            print_and_log("dispatching new job queue")
+            print_and_log("dispatching new job queue, estimated running time %s" % job_q[-1])
             # 分发每个 step 上的所有 job
-            for job_q_idx in range(len(job_q)):
+            for job_q_idx in range(len(job_q) - 1): # 最后一项是估计的运行时间
                 job_list = job_q[job_q_idx].split(':')  
-                              
+
                 for job_id in job_list:
                     offlineJob = self.offline_jobs_dict[job_id]
 
@@ -130,17 +130,18 @@ class DispatchOfflineJob(DispatchBase):
         # for job_q in sorted_job_csv:
         self.output_optimized()
         
+        self.sorte_machine()
         cost = self.sum_scores_of_machine()
         for machine_id, machine_running_res in self.sorted_machine_res:
             logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
-        print_and_log('cost of [%s] is %f/%f' % (self.job_set, cost, cost/SLICE_CNT))
+        print_and_log('cost of [%s] is %f/%f, cpu per is %f' % (self.job_set, cost, cost/SLICE_CNT, g_min_cpu_left_useage_per[self.job_set]))
 
                 
 if __name__ == '__main__':
     job_set = sys.argv[1].split("=")[1]
     optimized_dispatch_file = sys.argv[2].split("=")[1]
     
-    print_and_log("running DispatchOfflineJob... cpu per %f" % g_min_cpu_left_useage_per[job_set])
+    print("running DispatchOfflineJob... cpu per %f" % g_min_cpu_left_useage_per[job_set])
 
     dispatch_offline_job = DispatchOfflineJob(job_set, optimized_dispatch_file)
     dispatch_offline_job.dispatch_offline_jobs()
