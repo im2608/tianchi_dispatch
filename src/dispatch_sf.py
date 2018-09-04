@@ -163,19 +163,24 @@ def combine_output():
                         filename=log_file,
                         filemode='w')
         
-    combine_file_dict = {'a':['a_optimized_20180826_194316.csv', 'dispatch_offline.a.20180828_151152.csv', 0.5], # 6257 
+    combine_file_dict = {
+#                         'a':['a_optimized_20180826_194316.csv', 'dispatch_offline.a.20180828_151152.csv', 0.5], # 6257
+                        
+                        'a':['a_optimized_20180902_190138.csv', 'dispatch_offline.a.20180902_204256.csv', 0.5], # 5699
+                         
+                         
                          'b':['b_optimized_20180827_115852.csv', 'dispatch_offline.b.20180830_080940.csv', 0.5], # 6166
                          
 #                         'c':['c_optimized.csv', 'dispatch_offline.c.csv', 0.5], # 9578                        
-#                         'c':['c_optimized_20180830_113229.csv', 'dispatch_offline.c.20180830_173725.csv', 0.5], # 8629
-                        'c':['c_optimized_20180831_192858.csv', 'dispatch_offline.c.20180901_205508.csv', 0.45], # 7841
+                        'c':['c_optimized_20180830_113229.csv', 'dispatch_offline.c.20180830_173725.csv', 0.5], #7646, 8629
                         
                         
 #                         'd':['d_optimized.csv', 'dispatch_offline.d.csv', 0.5], # 9530                        
 #                         'd':['d_optimized_20180830_113256.csv', 'dispatch_offline.d.20180830_173011.csv', 0.4], # 8603
 #                         'd':['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180831_184050.csv', 0.4], # 8129
+                        'd' : ['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180901_074659.csv', 0.45], # 7028, 7600
+
                         
-                        'd' : ['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180901_074659.csv', 0.45], # 7600
 #                          'e':['e_optimized.csv', "", 0], # 10300
                          'e':['e_optimized_20180831_192840.csv', "", 0], # 9888
                          }

@@ -380,9 +380,9 @@ class AdjustDispatch(object):
         if (opt):
             # 将 running inst 最少的机器上的 inst 全部迁出
             self.sort_machine_by_running_inst_list()
-            longest_inst_list = 3
+            longest_inst_list = 4
             if (self.job_set == 'e'):
-                longest_inst_list = 2
+                longest_inst_list = 3
 
             for machine_start_idx in range(g_prefered_machine[self.job_set][1]):
                 if (len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) > 0 and 
@@ -638,9 +638,7 @@ class AdjustDispatch(object):
             cost += machine_running_res.get_machine_real_score()
     
         print(getCurrentTime(), 'final cost of [%s] is %f / %f' % (self.job_set, cost, cost / SLICE_CNT))
-        if (cost / SLICE_CNT < 5500):
-            exit(0)
-        
+
         return cost / SLICE_CNT
         
     def output_optimized(self):

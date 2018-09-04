@@ -156,4 +156,4 @@ g_max_offline_job_step = {'a' : 10, 'b':9, 'c':10, 'd':8}
 g_job_cnt = {'a':5241, 'b':5637, 'c':2840, 'd':2250}
 
 # cpu 最小剩余容量 for dispatching offline jobs
-g_min_cpu_left_useage_per = {'a':0.4, 'b':0.4, 'c':0.4, 'd':0.4, 'e':0}
+g_min_cpu_left_useage_per = {'a':0.5, 'b':0.5, 'c':0.5, 'd':0.5, 'e':0}

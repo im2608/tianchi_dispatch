@@ -22,12 +22,11 @@ class OfflineJob(object):
     @staticmethod
     def get_max_finish_slice_of_offline(offlineJob, machine_runing_info_dict, offline_jobs_dict):
         max_finish_slice = 0
-        for prefix_job in offlineJob.prefix_jobs:
-            for machine_id, machine_running_res in machine_runing_info_dict.items():
-                finish_slice = machine_running_res.get_finish_slice_of_offline(offline_jobs_dict[prefix_job])
-                if (finish_slice > 0 and finish_slice > max_finish_slice):
-                    max_finish_slice = finish_slice
-                    
+        for machine_id, machine_running_res in machine_runing_info_dict.items():
+            finish_slice = machine_running_res.get_max_prefix_finish_slice(offlineJob, offline_jobs_dict)
+            if (finish_slice > 0 and finish_slice > max_finish_slice):
+                max_finish_slice = finish_slice
+
         return max_finish_slice
                 
             
