@@ -14,7 +14,7 @@
     python cost_score.py set=X  X = [a,b,c,d,e]， 调度 online job
         得到各个 job set online job 的调度结果, 输出到 Project/output/sf中, 文件格式为 X_optimized_YYYYmmdd_HHMMSS.csv
         
-       运行 topological_sort(job_set) (dispatch_sf.py) 函数， 会对 offline job 进行拓扑排序， 生成  sorted_job.X.csv, 该文件作为调度 offline job 的输入文件之一
+    运行 topological_sort(job_set) (dispatch_sf.py) 函数， 会对 offline job 进行拓扑排序， 生成  sorted_job.X.csv, 该文件作为调度 offline job 的输入文件之一
         
     python DispatchOffline.py set=X file=X_optimized_YYYYMMDD_HHMMSS.csv   调度 offline job
     X = [a,b,c,d], file为前一步得到的 online job 调度结果， 在此基础上调度 offline job， 代码会到 output 目录中读取该文件
