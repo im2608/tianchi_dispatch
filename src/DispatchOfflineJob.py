@@ -104,6 +104,7 @@ class DispatchOfflineJob(DispatchBase):
                                     dispatchable_machine_list.clear()
                                 dispatchable_machine_list.append(machine_id)
 
+                        # 分发失败， 分配一台空闲机器
                         if (min_dispatchable_slice == SLICE_CNT):
                             print_and_log("Warning! No enough machine for job %s, %d inst left" % (offlineJob.job_id, offlineJob.inst_cnt))
                             for each_disp in job_q_dispatch_soltion:
@@ -126,15 +127,15 @@ class DispatchOfflineJob(DispatchBase):
                             continue_dispatch = False
                             break
 
-                        print_and_log("job %s, %d inst left, start slice %d, min dispatch slice %d  " % 
-                                      (offlineJob.job_id, offlineJob.inst_cnt, dispatch_slice, min_dispatchable_slice), print_new_line=False)
+                        print_and_log("job %s, %d inst left, start slice %d, min dispatch slice %d, usable machine cnt %d  " % 
+                                      (offlineJob.job_id, offlineJob.inst_cnt, dispatch_slice, min_dispatchable_slice, len(dispatchable_machine_list)), print_new_line=False)
 
                         dispatch_slice = min_dispatchable_slice
 
                         for machine_id in dispatchable_machine_list:
                             machine_running_res = self.machine_runing_info_dict[machine_id]
-                            dispatch_cnt = machine_running_res.dispatch_offline_job_one(offlineJob, dispatch_slice)
-
+#                             dispatch_cnt = machine_running_res.dispatch_offline_job_one(offlineJob, dispatch_slice)
+                            dispatch_cnt = machine_running_res.dispatch_offline_job(offlineJob, dispatch_slice)
                             if (dispatch_cnt > 0):
                                 offlineJob.inst_cnt -= dispatch_cnt                                
                                 job_q_dispatch_soltion.append([job_id, machine_id, dispatch_slice, dispatch_cnt])
@@ -154,7 +155,7 @@ class DispatchOfflineJob(DispatchBase):
                 # while job_id_idx < len(job_list) and continue_dispatch:
                 if (continue_dispatch):
                     job_step_idx += 1
-                   
+
             if (continue_dispatch):
                 self.dispatch_job_list.extend(job_q_dispatch_soltion)
                 dispatched_job += dispatched_job_in_q
@@ -182,17 +183,17 @@ class DispatchOfflineJob(DispatchBase):
         return tmp
 
     def extend_usable_machine_list(self, usable_machine_list, idle_machine_list):
-        extend_cnt = 10
-        if (len(idle_machine_list) < extend_cnt):
+        
+        if (len(idle_machine_list) < g_extend_idle_machine_cnt):
             usable_machine_list.extend(idle_machine_list)
             return usable_machine_list, []
         
-        print(getCurrentTime(), 'extend %s to usable machine list' % idle_machine_list[-extend_cnt:])
-        for machine_id in idle_machine_list[-extend_cnt:]:
+        print(getCurrentTime(), 'extend %s to usable machine list' % idle_machine_list[-g_extend_idle_machine_cnt:])
+        for machine_id in idle_machine_list[-g_extend_idle_machine_cnt:]:
             usable_machine_list.append(machine_id)
             idle_machine_list.remove(machine_id)
             
-        self.total_expanded_idle_machine += extend_cnt
+        self.total_expanded_idle_machine += g_extend_idle_machine_cnt
 
         return usable_machine_list, idle_machine_list
             

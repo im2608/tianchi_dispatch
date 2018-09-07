@@ -73,13 +73,9 @@ class AdjustDispatch(object):
         self.sorted_machine_res = sorted(self.machine_runing_info_dict.items(), key = lambda d : len(d[1].running_inst_list))
 
     
-    #  将重载机器上的 inst 随机迁移到其他轻载的机器上直到没有空载的机器
+    #  分散： 将重载机器上的 inst 随机迁移到其他轻载的机器上直到没有空载的机器
     def balance_inst_between_machine(self):
         
-#         b_balanced_atleast_one = True
-#         while (self.sorted_machine_res[-1][1].get_machine_real_score() == 0 and b_balanced_atleast_one):            
-#             print_and_log("here still are empyty load machines...")
-#             b_balanced_atleast_one = False
         for round_num in [1]:
             machine_idx = 0
             
@@ -141,8 +137,8 @@ class AdjustDispatch(object):
             self.sort_machine()
             
         self.output_optimized()
-        print_and_log('leaving balance_inst_between_machine...')
         
+        print_and_log('leaving balance_inst_between_machine...')
     
     def get_immigratable_machine(self, inst_id, skipped_machine_id):
         immigratable_machine_list = []
@@ -378,12 +374,9 @@ class AdjustDispatch(object):
         skipped_machine_list = []
         
         if (opt):
-            # 将 running inst 最少的机器上的 inst 全部迁出
+            # 集中： 将 running inst 最少的机器上的 inst 全部迁出
             self.sort_machine_by_running_inst_list()
-            longest_inst_list = 4
-            if (self.job_set == 'e'):
-                longest_inst_list = 3
-
+            longest_inst_list = 2
             for machine_start_idx in range(g_prefered_machine[self.job_set][1]):
                 if (len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) > 0 and 
                     len(self.sorted_machine_res[machine_start_idx][1].running_inst_list) <= longest_inst_list):
@@ -391,15 +384,10 @@ class AdjustDispatch(object):
 
             print_and_log("Here are %d machines whose running inst list less than %d" % (len(migrating_machine_set), longest_inst_list))
         else:
-            # 从得分最高的前 10% 的机器迁出 cpu 最高的 n 个 inst
+            # 分散： 从得分最高的前 30% 的机器迁出 cpu 最高的 n 个 inst
             self.sort_machine()
-#             for machine_start_idx in range(g_prefered_machine[job_set][1] // 10):
-#                 migrating_machine_set.append(self.sorted_machine_res[machine_start_idx][0])
-            for machine_id, machine_running_res in self.sorted_machine_res:
-                if (machine_running_res.get_machine_real_score() > BASE_SCORE): 
-                    migrating_machine_set.append(machine_id)
-
-            print_and_log("Here are %d machines whose score > %d" % (len(migrating_machine_set), BASE_SCORE))
+            for machine_start_idx in range((g_prefered_machine[job_set][1] // 10 )* 30):
+                migrating_machine_set.append(self.sorted_machine_res[machine_start_idx][0])
 
         machine_start_idx = 0
                                                 # 有迁出 inst 的机器                不再迁入 inst
@@ -417,7 +405,7 @@ class AdjustDispatch(object):
         is_windows = 'Windows' in platform.platform()
         
         machine_start_idx = 0
-
+        
         for machine_id in migrating_machine_set:
             heavest_load_machine = self.machine_runing_info_dict[machine_id]
             heavy_score = heavest_load_machine.get_machine_real_score() 
@@ -495,7 +483,7 @@ class AdjustDispatch(object):
                                len(migrating_running_inst_list), best_migrating_score, heavest_load_machine.get_machine_real_score()))
                 machine_start_idx += 1
                 continue
-
+            
             print_and_log('migrating solution for machine : %d (%d / %d ), real score %f, migrating delta score %f, %s ' % \
                           (machine_id, machine_start_idx, len(migrating_machine_set), 
                            heavest_load_machine.get_machine_real_score(), best_migrating_score,
@@ -505,7 +493,6 @@ class AdjustDispatch(object):
                 for each_inst in inst_list:
                     app_res = self.app_res_dict[self.inst_app_dict[each_inst]]
     
-                    # 迁入
                     if (not self.machine_runing_info_dict[immigrating_machine].dispatch_app(each_inst, app_res, self.app_constraint_dict)):
                         print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (each_inst, immigrating_machine))
                         return
@@ -549,31 +536,7 @@ class AdjustDispatch(object):
 
         self.migrating_list = []
 
-#         optimized_file = r'%s/../output/%s/%s_optimized_20180826_194316.csv' % (runningPath, data_set, self.job_set)
-#         if (os.path.exists(optimized_file)):
-#             print(getCurrentTime(), 'loading %s' % optimized_file)
-#             app_dispatch_csv = csv.reader(open(optimized_file, 'r'))
-#             for each_dispatch in app_dispatch_csv:
-#                 inst_id = int(each_dispatch[1].split('_')[1])
-#                 machine_id = int(each_dispatch[2].split('_')[1])
-#                 app_res = self.app_res_dict[self.inst_app_dict[inst_id]]
-#       
-#                 # inst 已经部署到了其他机器上，这里需要将其迁出
-#                 if (inst_id in insts_running_machine_dict):
-#                     immigrating_machine = insts_running_machine_dict[inst_id]
-#                     self.machine_runing_info_dict[immigrating_machine].release_app(inst_id, app_res)                
-#       
-#                 if (not self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)):
-#                     self.machine_runing_info_dict[machine_id].dispatch_app(inst_id, app_res, self.app_constraint_dict)
-#                     print_and_log("ERROR! Failed to immigrate inst %d to machine %d" % (inst_id, machine_id))
-#                     exit(-1)
-#       
-#                 insts_running_machine_dict[inst_id] = machine_id      
-#                 self.migrating_list.append('1,inst_%d,machine_%d' % (inst_id, machine_id)) 
-
         self.sort_machine()
-
-        self.balance_inst_between_machine()   
 
     def check_one_constraince(self, app_A_id, app_B_id, app_B_running_inst):
         if (app_A_id in self.app_constraint_dict and app_B_id in self.app_constraint_dict[app_A_id]):
@@ -595,7 +558,7 @@ class AdjustDispatch(object):
                     return False
 
         return True
-        
+
     def check_dispatching(self, machine_running_res):
         if (not self.check_constraince(machine_running_res)):
             return False        
@@ -622,13 +585,9 @@ class AdjustDispatch(object):
         
         print_and_log('cost of [%s] is %f/%f' % (self.job_set, cost, cost/SLICE_CNT))
 
-        # round 1, 2 are in self.balance_inst_between_machine()
-        opt = True
-        for round_num in [2, 3]:
-            next_cost = self.adj_dispatch_dp(round_num, opt)
-            opt = not opt
-            print_and_log('After adj_dispatch_dp(%d, %s), score %f -> %f' % (round_num, opt, cost, next_cost))
-
+        self.balance_inst_between_machine([1])
+        self.adj_dispatch_dp(2, True)
+        self.adj_dispatch_dp(3, False)
         self.sort_machine()
         cost = 0
         for machine_id, machine_running_res in self.sorted_machine_res:

@@ -88,13 +88,16 @@ class DispatchBase(object):
                             filemode='w')
 
         self.output_filename = r'%s/../output/%s/dispatch_offline.%s.%s.csv' % (runningPath, data_set, self.job_set, time_now)
-        
+
         self.dispatch_job_list = []
-        
+
         self.sorte_machine()
         cost = self.sum_scores_of_machine()
         for machine_id, machine_running_res in self.sorted_machine_res:
-            logging.info('machine_%d,%f' % (machine_id, machine_running_res.get_machine_real_score()))
+#             machine_running_res.calculate_cpu_per()
+            logging.info('machine_%d,score %f, inst list len %d, cpu per %f, cpu per number %f' % 
+                         (machine_id, machine_running_res.get_machine_real_score(), 
+                          len(machine_running_res.running_inst_list), machine_running_res.per, machine_running_res.cpu_per))
         print_and_log('cost of [%s] is %f/%f, cpu per %f' % 
                       (self.job_set, cost, cost/SLICE_CNT, g_min_cpu_left_useage_per[self.job_set]))
     

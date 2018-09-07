@@ -166,23 +166,52 @@ def combine_output():
     combine_file_dict = {
 #                         'a':['a_optimized_20180826_194316.csv', 'dispatch_offline.a.20180828_151152.csv', 0.5], # 6257
                         
-                        'a':['a_optimized_20180902_190138.csv', 'dispatch_offline.a.20180902_204256.csv', 0.5], # 5699
+#                         'a':['a_optimized_20180902_190138.csv', 'dispatch_offline.a.20180902_204256.csv', 0.5], # 5699
+#                         'a':['a_optimized_20180831_113516.csv', 'dispatch_offline.a.20180904_211438.csv', 0.5], # 4865, 5394
+                        
+                        'a':['a_optimized_20180831_113516.csv', 'dispatch_offline.a.20180905_172115.csv', 0.5], # 4865, 5285
+                        
+                        
+                        
+                        
                          
                          
-                         'b':['b_optimized_20180827_115852.csv', 'dispatch_offline.b.20180830_080940.csv', 0.5], # 6166
+#                          'b':['b_optimized_20180827_115852.csv', 'dispatch_offline.b.20180830_080940.csv', 0.5], # 6166                         
+#                          'b':['b_optimized_20180831_173750.csv', 'dispatch_offline.b.20180904_181622.csv', 0.5], # 4878, 5888
+                         
+                         'b':['b_optimized_20180831_173750.csv', 'dispatch_offline.b.20180905_172020.csv', 0.5], # 4878, 5467
+                         
+                         
+                         
+                         
                          
 #                         'c':['c_optimized.csv', 'dispatch_offline.c.csv', 0.5], # 9578                        
-                        'c':['c_optimized_20180830_113229.csv', 'dispatch_offline.c.20180830_173725.csv', 0.5], #7646, 8629
+#                         'c':['c_optimized_20180830_113229.csv', 'dispatch_offline.c.20180830_173725.csv', 0.5], #7646, 8629
+#                         'c':['c_optimized_20180903_230132.csv', 'dispatch_offline.c.20180905_080533.csv', 0.5], #6901, 7220
+                        
+                        'c':['c_optimized_20180903_230132.csv', 'dispatch_offline.c.20180905_171853.csv', 0.5], #6901, 7193
+                        
+                        
                         
                         
 #                         'd':['d_optimized.csv', 'dispatch_offline.d.csv', 0.5], # 9530                        
 #                         'd':['d_optimized_20180830_113256.csv', 'dispatch_offline.d.20180830_173011.csv', 0.4], # 8603
 #                         'd':['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180831_184050.csv', 0.4], # 8129
-                        'd' : ['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180901_074659.csv', 0.45], # 7028, 7600
+#                         'd' : ['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180901_074659.csv', 0.45], # 7028, 7600
+#                         'd' : ['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180904_165740.csv', 0.45], # 7028, 7271
+#                         'd' : ['d_optimized_20180831_113358.csv', 'dispatch_offline.d.20180904_183133.csv', 0.45], # 7028, 7243
+#                         'd' : ['d_optimized_20180904_192911.csv', 'dispatch_offline.d.20180905_044723.csv', 0.45], # 6870, 7213
+#                         'd' : ['d_optimized_20180904_192911.csv', 'dispatch_offline.d.20180905_084526.csv', 0.45], # 6870, 7156
+                        
+                        'd' : ['d_optimized_20180904_192911.csv', 'dispatch_offline.d.20180905_171846.csv', 0.45], # 6870, 7125
+                        
+                        
+                        
 
                         
 #                          'e':['e_optimized.csv', "", 0], # 10300
-                         'e':['e_optimized_20180831_192840.csv', "", 0], # 9888
+#                          'e':['e_optimized_20180831_192840.csv', "", 0], # 9888
+                         'e':['e_optimized_20180907_050647.csv', "", 0], # 9760
                          }
 
     time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')

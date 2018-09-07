@@ -157,3 +157,5 @@ g_job_cnt = {'a':5241, 'b':5637, 'c':2840, 'd':2250}
 
 # cpu 最小剩余容量 for dispatching offline jobs
 g_min_cpu_left_useage_per = {'a':0.5, 'b':0.5, 'c':0.5, 'd':0.5, 'e':0}
+
+g_extend_idle_machine_cnt = 1

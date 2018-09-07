@@ -22,12 +22,21 @@ class MachineRunningInfo(object):
         
         self.running_offline_job_inst_dict = {}
         
+        self.per = 0
+        
         self.cpu_per = self.machine_res.cpu * g_min_cpu_left_useage_per[job_set]
         
         return
     
-    def set_cpu_per(self, min_cpu_left_useage_per):
-        self.cpu_per = self.machine_res.cpu * min_cpu_left_useage_per
+    def calculate_cpu_per(self):
+        inst_list_len = len(self.running_inst_list)
+    
+        if (inst_list_len == 0):
+            self.per = 0.59 - 0.001
+        else:
+            self.per = np.log((1 + (1 + inst_list_len)) / (1 + inst_list_len)) + 0.5
+        
+        self.cpu_per =  (1 - self.per - 0.001) * self.machine_res.cpu 
     
     def calculate_migrating_delta_score(self, app_res_dict):
         for app_id in self.running_app_dict.keys():
@@ -226,7 +235,12 @@ class MachineRunningInfo(object):
         tmp = self.running_machine_res.get_cpu_slice() + app_res.get_cpu_slice() # app 迁出后， 剩余的cpu 容量增加
          
         score = score_of_cpu_percent_slice((self.machine_res.cpu - tmp) / self.machine_res.cpu, len(self.running_inst_list))
-        return self.get_machine_real_score() - score
+        delta_score = self.get_machine_real_score() - score
+        if (self.get_machine_real_score() - delta_score < 1470 and 
+            self.get_machine_real_score() - delta_score > 0):
+            delta_score = self.get_machine_real_score() - 1470
+
+        return delta_score
     
 
     # 将 app 迁出后的分数
@@ -417,11 +431,13 @@ class MachineRunningInfo(object):
         
         # 在cpu 剩余容量不低于 cpu_per 的情况下， 看能分发多少个 job inst
         machine_cpu_slice = self.get_cpu_slice_by_index(offlineJob, current_slice) - self.cpu_per
-        if (np.any(machine_cpu_slice <= 0)):
+        machine_mem_slice = self.get_mem_slice_by_index(offlineJob, current_slice)
+        
+        if (np.any(machine_cpu_slice <= 0) or np.any(machine_mem_slice) <= 0):
             return 0 
 
         # 能分发多少个 job inst
-        dispatchable_inst_cnt = min(machine_cpu_slice.min() // offlineJob.cpu, offlineJob.inst_cnt)
+        dispatchable_inst_cnt = min(machine_cpu_slice.min() // offlineJob.cpu, machine_mem_slice.min() // offlineJob.mem, offlineJob.inst_cnt)
         
         return dispatchable_inst_cnt 
 
@@ -514,12 +530,12 @@ class MachineRunningInfo(object):
             if (real_score - delta_score < SLICE_CNT):
                 return running_inst_list[:i + 1]
             
-        return running_inst_list
+        return running_inst_list    
             
 
     # 返回 cpu 最高的 n 个 inst
     def get_max_cpu_inst_list(self, app_res_dict, inst_app_dict, n):        
-        running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=True)
+        running_inst_list = sorted(self.running_inst_list, key=lambda inst_id : app_res_dict[inst_app_dict[inst_id]].get_cpu_mean(), reverse=False)
         
         if (len(running_inst_list) <= n):
             return running_inst_list
