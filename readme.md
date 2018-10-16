@@ -5,7 +5,9 @@
 运行方法：
 1. 创建目录： 
     Project/input/sf，  天池上下载的输入文件放在这里 
+    
     Project/output/sf， 输出文件会生成在这里
+    
     Project/log  日志目录
         
 2. 源代码放到 Project/src 中    
