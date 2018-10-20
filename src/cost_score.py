@@ -585,7 +585,7 @@ class AdjustDispatch(object):
         
         print_and_log('cost of [%s] is %f/%f' % (self.job_set, cost, cost/SLICE_CNT))
 
-        self.balance_inst_between_machine([1])
+        self.balance_inst_between_machine()
         self.adj_dispatch_dp(2, True)
         self.adj_dispatch_dp(3, False)
         self.sort_machine()
@@ -623,7 +623,8 @@ def add_name():
     return
 
 if __name__ == '__main__':
-    job_set = sys.argv[1].split("=")[1]     
+#     job_set = sys.argv[1].split("=")[1]
+    job_set = 'a'     
     
     adjDis = AdjustDispatch(job_set)  
     adjDis.calculate_cost_score()
